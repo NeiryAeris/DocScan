@@ -2,10 +2,10 @@ package com.example.docscan
 
 import android.Manifest
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
-import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.ComponentActivity
@@ -15,25 +15,26 @@ import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import com.example.docscan.logic.camera.CameraController
 import com.example.docscan.logic.io.PhotoFileStore
-import com.example.docscan.logic.utils.DebugLog            // ⬅️ NEW
+import com.example.docscan.logic.processing.ImageProcessor
+import com.example.docscan.logic.utils.DebugLog
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.collectLatest        // ⬅️ NEW
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-
 class MainActivity : ComponentActivity() {
 
     private lateinit var previewView: PreviewView
-    private lateinit var imageView: ImageView
+    private lateinit var bottomImageView: ImageView
     private lateinit var btnCapture: Button
+    private lateinit var btnPick: Button
     private lateinit var statusView: TextView
 
-    // ⬇️ Debug UI
+    // Debug UI
     private lateinit var debugToggle: TextView
     private lateinit var debugScroll: ScrollView
     private lateinit var debugText: TextView
@@ -53,10 +54,16 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    // Gallery picker
+    private val pickImageLauncher =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            uri?.let { handlePickedImage(it) }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // ---------- Minimal UI (camera preview + controls + debug console) ----------
+        // ---------- Root vertical layout ----------
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -65,6 +72,7 @@ class MainActivity : ComponentActivity() {
             )
         }
 
+        // ---------- Live camera preview ----------
         previewView = PreviewView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
@@ -73,6 +81,7 @@ class MainActivity : ComponentActivity() {
         }
         root.addView(previewView)
 
+        // ---------- Controls row ----------
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
@@ -89,13 +98,18 @@ class MainActivity : ComponentActivity() {
         }
         controls.addView(btnCapture)
 
+        btnPick = Button(this).apply {
+            text = "Pick from Gallery"
+            setOnClickListener { pickImageLauncher.launch("image/*") }
+        }
+        controls.addView(btnPick)
+
         statusView = TextView(this).apply {
             text = "Ready"
             setPadding(24, 0, 0, 0)
         }
         controls.addView(statusView)
 
-        // ⬇️ Debug toggle
         debugToggle = TextView(this).apply {
             text = "Show Debug"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
@@ -106,27 +120,27 @@ class MainActivity : ComponentActivity() {
 
         root.addView(controls)
 
-        imageView = ImageView(this).apply {
+        // ---------- Bottom image preview ----------
+        bottomImageView = ImageView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(220)
+                dp(240)
             )
-            scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
         }
-        root.addView(imageView)
+        root.addView(bottomImageView)
 
-        // ⬇️ Debug console (collapsed by default)
+        // ---------- Debug console ----------
         debugText = TextView(this).apply {
             setTextIsSelectable(true)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = android.graphics.Typeface.MONOSPACE
             setPadding(16)
         }
-
         debugScroll = ScrollView(this).apply {
             isFillViewport = true
-            visibility = View.GONE
+            visibility = android.view.View.GONE
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dp(180)
@@ -136,20 +150,17 @@ class MainActivity : ComponentActivity() {
         root.addView(debugScroll)
 
         setContentView(root)
-        // ---------------------------------------------------------------------------
 
         cameraController = CameraController(this)
         fileStore = PhotoFileStore(this)
 
         requestCameraPermission.launch(Manifest.permission.CAMERA)
 
-        // ⬇️ Subscribe to DebugLog stream to update on-screen console
         lifecycleScope.launch {
             DebugLog.stream.collectLatest { lines ->
                 debugText.text = lines.joinToString("\n")
-                // auto-scroll to bottom when visible
-                if (debugScroll.visibility == View.VISIBLE) {
-                    debugScroll.post { debugScroll.fullScroll(View.FOCUS_DOWN) }
+                if (debugScroll.visibility == android.view.View.VISIBLE) {
+                    debugScroll.post { debugScroll.fullScroll(android.view.View.FOCUS_DOWN) }
                 }
             }
         }
@@ -166,17 +177,13 @@ class MainActivity : ComponentActivity() {
     private suspend fun setupCamera() {
         try {
             status("Starting camera…")
-            DebugLog.i("Initializing ProcessCameraProvider")
             cameraController.initProviderIfNeeded()
-
-            DebugLog.i("Binding use cases (back camera)")
             cameraController.bindUseCases(
                 lifecycleOwner = this,
                 surfaceProvider = previewView.surfaceProvider,
                 useBackCamera = true
             )
             status("Camera ready")
-            DebugLog.i("Camera ready")
         } catch (t: Throwable) {
             status("Camera error: ${t.message}")
             DebugLog.e("setupCamera failed: ${t.message}", tr = t)
@@ -189,22 +196,17 @@ class MainActivity : ComponentActivity() {
             try {
                 btnCapture.isEnabled = false
                 status("Capturing…")
-                DebugLog.i("Capture started")
 
                 val outFile = withContext(Dispatchers.IO) { fileStore.newTempJpeg("raw") }
-                DebugLog.d("Capture target: ${outFile.absolutePath}")
-
                 val savedFile = awaitCaptureToFile(outFile)
-                DebugLog.i("Capture saved: ${savedFile.absolutePath}")
 
-                val bmp = withContext(Dispatchers.IO) {
+                val original = withContext(Dispatchers.IO) {
                     BitmapFactory.decodeFile(savedFile.absolutePath)
                         ?: error("Decode returned null")
                 }
-                imageView.setImageBitmap(bmp)
 
-                status("Saved: ${savedFile.name}")
-                toast("Captured: ${savedFile.name}")
+                processAndShow(original)
+
             } catch (t: Throwable) {
                 status("Capture error: ${t.message}")
                 DebugLog.e("Capture failed: ${t.message}", tr = t)
@@ -215,16 +217,54 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun handlePickedImage(uri: Uri) {
+        lifecycleScope.launch {
+            try {
+                status("Loading image…")
+                val bitmap = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri).use { input ->
+                        BitmapFactory.decodeStream(input)
+                            ?: error("Decode returned null")
+                    }
+                }
+                processAndShow(bitmap)
+            } catch (t: Throwable) {
+                status("Pick error: ${t.message}")
+                DebugLog.e("Pick failed: ${t.message}", tr = t)
+                toast("Error: ${t.message}")
+            }
+        }
+    }
+
+    private suspend fun processAndShow(bitmap: android.graphics.Bitmap) {
+        val result = withContext(Dispatchers.Default) {
+            val warpedOut = File(getExternalFilesDir(null), "scanned_page.jpg")
+            ImageProcessor.processDocument(bitmap, outFile = warpedOut)
+        }
+
+        bottomImageView.setImageBitmap(result.bitmap)
+
+        if (result.quad == null) {
+            status("No paper detected")
+            toast("No paper detected")
+        } else {
+            status("Contour drawn & warped")
+            toast("Contour drawn")
+            DebugLog.i("Quad: " + result.quad.joinToString { "(${it.x.toInt()},${it.y.toInt()})" })
+            result.file?.let {
+                DebugLog.i("Warped saved at: ${it.absolutePath}")
+            }
+        }
+    }
+
     private suspend fun awaitCaptureToFile(target: File): File =
         suspendCancellableCoroutine { cont ->
             cameraController.takePhoto(
                 outputFile = target,
                 onSaved = { file ->
-                    DebugLog.d("onImageSaved callback")
                     if (cont.isActive) cont.resume(file)
                 },
                 onError = { err ->
-                    DebugLog.e("onImageSaved error: ${err.message}", tr = err)
                     if (cont.isActive) cont.resumeWithException(err)
                 }
             )
@@ -232,7 +272,7 @@ class MainActivity : ComponentActivity() {
 
     private fun toggleDebug() {
         debugVisible = !debugVisible
-        debugScroll.visibility = if (debugVisible) View.VISIBLE else View.GONE
+        debugScroll.visibility = if (debugVisible) android.view.View.VISIBLE else android.view.View.GONE
         debugToggle.text = if (debugVisible) "Hide Debug" else "Show Debug"
     }
 

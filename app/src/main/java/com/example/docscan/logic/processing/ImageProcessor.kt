@@ -1,167 +1,183 @@
 package com.example.docscan.logic.processing
 
 import android.graphics.Bitmap
-import androidx.core.graphics.createBitmap
 import org.opencv.android.Utils
 import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
-import kotlin.math.abs
+import java.io.File
+import java.io.FileOutputStream
+import kotlin.math.hypot
 import kotlin.math.max
-import kotlin.math.min
+import androidx.core.graphics.createBitmap
 
-/**
- * Image processing utilities (OpenCV).
- */
 object ImageProcessor {
 
-    /**
-     * Draws a green contour around the largest 4-point polygon that looks like a "paper".
-     * Returns a new bitmap with the contour overlaid.
-     *
-     * Strategy:
-     * 1) (Optionally) downscale for speed
-     * 2) grayscale -> blur -> Canny
-     * 3) findContours -> sort by area desc
-     * 4) approxPolyDP -> take first polygon with 4 points and "big enough"
-     * 5) scale contour back to original coords and draw it
-     */
-    fun drawPaperContour(
+    data class Result(
+        val bitmap: Bitmap,        // preview with contour
+        val quad: Array<Point>?,   // detected quad points
+        val warped: Mat?,          // warped Mat (scan result)
+        val file: File?            // saved JPEG (for PDF use)
+    )
+
+    fun processDocument(
         orig: Bitmap,
-        maxProcessSize: Int = 900,         // downscale longer side to this for speed/robustness
-        minAreaRatio: Double = 0.10,       // min area (vs image) to consider as paper (10%)
-        epsilonRatio: Double = 0.02        // polygon approximation: 2% of perimeter
-    ): Bitmap {
-        // --- ensure format OpenCV likes
+        outFile: File? = null
+    ): Result {
+        // Ensure ARGB_8888
         val srcBmp = if (orig.config != Bitmap.Config.ARGB_8888)
             orig.copy(Bitmap.Config.ARGB_8888, false) else orig
 
-        // --- build Mats
         val src = Mat(srcBmp.height, srcBmp.width, CvType.CV_8UC4)
         Utils.bitmapToMat(srcBmp, src)
 
-        // --- optional downscale for processing
-        val (proc, scale) = resizeForProcessing(src, maxProcessSize)
+        // --- Resize like Python ---
+        val maxSide = 1000.0
+        val h = src.rows()
+        val w = src.cols()
+        val scaleFactor = if (max(w, h) > maxSide) maxSide / max(w, h) else 1.0
+        val small = Mat()
+        if (scaleFactor != 1.0) {
+            Imgproc.resize(src, small, Size(w * scaleFactor, h * scaleFactor))
+        } else {
+            src.copyTo(small)
+        }
 
         val gray = Mat()
         val blurred = Mat()
+        val binary = Mat()
         val edges = Mat()
-        val hierarchy = Mat()
+        val closed = Mat()
         val contours = mutableListOf<MatOfPoint>()
 
-        var overlay: Bitmap
+        var quad: Array<Point>? = null
+        var warped: Mat? = null
+        var outBmp: Bitmap
 
         try {
-            // 1) grayscale -> blur -> edges
-            Imgproc.cvtColor(proc, gray, Imgproc.COLOR_RGBA2GRAY)
+            // Preprocess
+            Imgproc.cvtColor(small, gray, Imgproc.COLOR_RGBA2GRAY)
             Imgproc.GaussianBlur(gray, blurred, Size(5.0, 5.0), 0.0)
-            Imgproc.Canny(blurred, edges, 75.0, 200.0)
 
-            // 2) find contours
-            Imgproc.findContours(
-                edges, contours, hierarchy,
-                Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE
-            )
+            // Otsu threshold
+            Imgproc.threshold(blurred, binary, 0.0, 255.0, Imgproc.THRESH_BINARY + Imgproc.THRESH_OTSU)
 
-            // 3) sort by area (desc)
+            // Canny
+            Imgproc.Canny(binary, edges, 50.0, 150.0)
+
+            // Morph close
+            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(7.0, 7.0))
+            Imgproc.morphologyEx(edges, closed, Imgproc.MORPH_CLOSE, kernel)
+
+            // Find contours
+            val hierarchy = Mat()
+            Imgproc.findContours(closed, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE)
             contours.sortByDescending { Imgproc.contourArea(it) }
 
-            // 4) choose first "paper-like" (4 points, convex, big enough)
-            val imgArea = (proc.rows() * proc.cols()).toDouble()
-            var bestQuad: MatOfPoint2f? = null
+            val imgArea = (small.rows() * small.cols()).toDouble()
+            val maxArea = imgArea * 0.9
 
-            for (c in contours) {
+            // Try top 15 contours
+            for (c in contours.take(15)) {
                 val area = Imgproc.contourArea(c)
-                if (area < imgArea * minAreaRatio) continue
+                if (area > maxArea) continue
 
                 val c2f = MatOfPoint2f(*c.toArray())
                 val peri = Imgproc.arcLength(c2f, true)
                 val approx = MatOfPoint2f()
-                Imgproc.approxPolyDP(c2f, approx, epsilonRatio * peri, true)
+                Imgproc.approxPolyDP(c2f, approx, 0.08 * peri, true) // looser like Python
 
-                if (approx.total().toInt() == 4 && Imgproc.isContourConvex(MatOfPoint(*approx.toArray().map { Point(it.x, it.y) }.toTypedArray()))) {
-                    bestQuad = approx
+                val pts = approx.toArray()
+                if (pts.size == 4) {
+                    // scale back to original coords
+                    quad = pts.map { Point(it.x / scaleFactor, it.y / scaleFactor) }.toTypedArray()
+                    warped = fourPointWarp(src, quad!!)
                     break
                 }
-                approx.release()
-                c2f.release()
             }
 
-            // 5) draw on a copy of the original (full-res) image
-            val drawMat = src.clone()
+            // --- Fallback with minAreaRect ---
+            if (quad == null && contours.isNotEmpty()) {
+                val rect = Imgproc.minAreaRect(MatOfPoint2f(*contours[0].toArray()))
+                val boxPts = arrayOf(Point(), Point(), Point(), Point())
+                rect.points(boxPts) // fills array in-place
+                quad = boxPts.map { Point(it.x / scaleFactor, it.y / scaleFactor) }.toTypedArray()
+                warped = fourPointWarp(src, quad!!)
+            }
 
-            if (bestQuad != null) {
-                // scale points back to full resolution
-                val scaledQuad = MatOfPoint()
-                val pts = bestQuad!!.toArray().map {
-                    Point(it.x / scale, it.y / scale)
-                }.toTypedArray()
-                scaledQuad.fromArray(*pts)
-
-                // reorder to consistent order (optional; looks nicer)
-                val ordered = orderQuadClockwise(pts)
-                val poly = MatOfPoint(*ordered)
-
-                val listOfPoly = ArrayList<MatOfPoint>().apply { add(poly) }
+            // Draw contour on preview
+            val previewMat = src.clone()
+            quad?.let {
                 Imgproc.polylines(
-                    drawMat,
-                    listOfPoly,
+                    previewMat,
+                    listOf(MatOfPoint(*it)),
                     true,
-                    Scalar(0.0, 255.0, 0.0, 255.0), // green
-                    5
+                    Scalar(0.0, 255.0, 0.0),
+                    6
                 )
+            }
+            outBmp = createBitmap(previewMat.cols(), previewMat.rows())
+            Utils.matToBitmap(previewMat, outBmp)
+            previewMat.release()
 
-                poly.release()
-                scaledQuad.release()
-                bestQuad.release()
+            // Save warped if needed
+            var savedFile: File? = null
+            if (outFile != null && warped != null) {
+                val warpedBmp = createBitmap(warped.cols(), warped.rows())
+                Utils.matToBitmap(warped, warpedBmp)
+                FileOutputStream(outFile).use { fos ->
+                    warpedBmp.compress(Bitmap.CompressFormat.JPEG, 95, fos)
+                }
+                savedFile = outFile
             }
 
-            // back to Bitmap
-            overlay = createBitmap(drawMat.cols(), drawMat.rows())
-            Utils.matToBitmap(drawMat, overlay)
-            drawMat.release()
+            return Result(outBmp, quad, warped, savedFile)
+
         } finally {
-            // free native memory
             src.release()
-            if (proc !== src) proc.release()
+            small.release()
             gray.release()
             blurred.release()
+            binary.release()
             edges.release()
-            hierarchy.release()
+            closed.release()
             contours.forEach { it.release() }
         }
-
-        return overlay
     }
 
-    /** Resize longer side to maxProcessSize; return (matToUse, scaleFactor used to reach proc from src). */
-    private fun resizeForProcessing(src: Mat, maxProcessSize: Int): Pair<Mat, Double> {
-        val h = src.rows()
-        val w = src.cols()
-        val longSide = max(w, h).toDouble()
-        if (longSide <= maxProcessSize) return src to 1.0
-
-        val scale = maxProcessSize / longSide
-        val newW = (w * scale).toInt().coerceAtLeast(1)
-        val newH = (h * scale).toInt().coerceAtLeast(1)
-        val dst = Mat()
-        Imgproc.resize(src, dst, Size(newW.toDouble(), newH.toDouble()), 0.0, 0.0, Imgproc.INTER_AREA)
-        return dst to scale
-    }
-
-    /** Order quad points clockwise starting from top-left (roughly). */
+    // ---- helpers ----
     private fun orderQuadClockwise(pts: Array<Point>): Array<Point> {
-        // top-left = smallest (x+y), bottom-right = largest (x+y)
         val sumSorted = pts.sortedBy { it.x + it.y }
         val tl = sumSorted.first()
         val br = sumSorted.last()
-
-        // top-right = largest (x - y), bottom-left = smallest (x - y)
         val diffSorted = pts.sortedBy { it.x - it.y }
         val bl = diffSorted.first()
         val tr = diffSorted.last()
+        return arrayOf(tl, tr, br, bl)
+    }
 
-        // Ensure all distinct; fallback if any duplicates (rare)
-        val uniq = listOf(tl, tr, br, bl).distinct()
-        return if (uniq.size == 4) arrayOf(tl, tr, br, bl) else pts
+    private fun fourPointWarp(image: Mat, pts: Array<Point>): Mat {
+        val rect = orderQuadClockwise(pts)
+        val (tl, tr, br, bl) = rect
+
+        val widthA = hypot(br.x - bl.x, br.y - bl.y)
+        val widthB = hypot(tr.x - tl.x, tr.y - tl.y)
+        val maxWidth = max(widthA, widthB).toInt()
+
+        val heightA = hypot(tr.x - br.x, tr.y - br.y)
+        val heightB = hypot(tl.x - bl.x, tl.y - bl.y)
+        val maxHeight = max(heightA, heightB).toInt()
+
+        val srcPts = MatOfPoint2f(tl, tr, br, bl)
+        val dstPts = MatOfPoint2f(
+            Point(0.0, 0.0),
+            Point((maxWidth - 1).toDouble(), 0.0),
+            Point((maxWidth - 1).toDouble(), (maxHeight - 1).toDouble()),
+            Point(0.0, (maxHeight - 1).toDouble())
+        )
+
+        val M = Imgproc.getPerspectiveTransform(srcPts, dstPts)
+        val warped = Mat()
+        Imgproc.warpPerspective(image, warped, M, Size(maxWidth.toDouble(), maxHeight.toDouble()))
+        return warped
     }
 }

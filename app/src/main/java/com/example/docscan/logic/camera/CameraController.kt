@@ -6,16 +6,15 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview as CameraPreview
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.example.docscan.logic.utils.DebugLog
 import java.io.File
 import java.util.concurrent.Executor
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
-/**
- * Controls CameraX: bind, unbind, capture.
- * No UI code here — a SurfaceProvider must be provided by whoever uses this.
- */
 class CameraController(private val context: Context) {
 
     private var cameraProvider: ProcessCameraProvider? = null
@@ -23,25 +22,26 @@ class CameraController(private val context: Context) {
     private var preview: CameraPreview? = null
     private val mainExecutor: Executor by lazy { ContextCompat.getMainExecutor(context) }
 
-    /**
-     * Initialize camera provider once. Safe to call multiple times; it caches.
-     */
     suspend fun initProviderIfNeeded(): ProcessCameraProvider {
-        val existing = cameraProvider
-        if (existing != null) return existing
-
-        val provider = ProcessCameraProvider.getInstance(context).get()
-        cameraProvider = provider
-        return provider
+        cameraProvider?.let { return it }
+        val future = ProcessCameraProvider.getInstance(context)
+        return suspendCancellableCoroutine { cont ->
+            future.addListener(
+                {
+                    try {
+                        val provider = future.get()
+                        cameraProvider = provider
+                        DebugLog.i("ProcessCameraProvider ready")
+                        if (cont.isActive) cont.resume(provider)
+                    } catch (t: Throwable) {
+                        if (cont.isActive) cont.resumeWithException(t)
+                    }
+                },
+                mainExecutor
+            )
+        }
     }
 
-    /**
-     * Bind preview + image capture to lifecycle. Call after initProviderIfNeeded().
-     * @param lifecycleOwner Activity or Fragment implementing LifecycleOwner
-     * @param surfaceProvider A provider from PreviewView or your own SurfaceProvider
-     * @param useBackCamera When true selects DEFAULT_BACK_CAMERA, otherwise front.
-     * @param captureMode MAXIMIZE_QUALITY by default; set MINIMIZE_LATENCY if you need speed.
-     */
     fun bindUseCases(
         lifecycleOwner: LifecycleOwner,
         surfaceProvider: CameraPreview.SurfaceProvider,
@@ -49,14 +49,11 @@ class CameraController(private val context: Context) {
         captureMode: Int = ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY
     ) {
         val provider = cameraProvider
-            ?: throw IllegalStateException("Call initProviderIfNeeded() before bindUseCases().")
+            ?: throw IllegalStateException("initProviderIfNeeded() not called.")
 
-        // Build Preview
-        val cameraPreview = CameraPreview.Builder()
-            .build()
-            .also { it.setSurfaceProvider(surfaceProvider) }
-
-        // Build ImageCapture
+        val cameraPreview = CameraPreview.Builder().build().also {
+            it.setSurfaceProvider(surfaceProvider)
+        }
         val capture = ImageCapture.Builder()
             .setCaptureMode(captureMode)
             .build()
@@ -68,34 +65,25 @@ class CameraController(private val context: Context) {
             cameraPreview,
             capture
         )
-
         preview = cameraPreview
         imageCapture = capture
+        DebugLog.i("Use cases bound: ${if (useBackCamera) "back" else "front"} camera")
     }
 
-    /**
-     * Unbind everything (e.g., on lifecycle destroy).
-     */
     fun unbindAll() {
         cameraProvider?.unbindAll()
         imageCapture = null
         preview = null
     }
 
-    /**
-     * Take a photo to the given file.
-     * This runs callbacks on the mainExecutor (you can switch threads in the caller).
-     */
     fun takePhoto(
         outputFile: File,
         onSaved: (file: File) -> Unit,
         onError: (Throwable) -> Unit
     ) {
         val capture = imageCapture
-            ?: return onError(IllegalStateException("ImageCapture not bound. Did you call bindUseCases()?"))
-
+            ?: return onError(IllegalStateException("ImageCapture not bound"))
         val options = ImageCapture.OutputFileOptions.Builder(outputFile).build()
-
         capture.takePicture(
             options,
             mainExecutor,
