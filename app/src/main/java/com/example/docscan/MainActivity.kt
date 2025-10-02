@@ -1,6 +1,7 @@
 package com.example.docscan
 
 import android.Manifest
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
@@ -22,9 +23,11 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import org.opencv.android.Utils
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import androidx.core.graphics.createBitmap
 
 class MainActivity : ComponentActivity() {
 
@@ -242,7 +245,13 @@ class MainActivity : ComponentActivity() {
             ImageProcessor.processDocument(bitmap, outFile = warpedOut)
         }
 
-        bottomImageView.setImageBitmap(result.bitmap)
+        bottomImageView.setImageBitmap(
+            result.warped?.let {
+                val warpedBmp = createBitmap(it.cols(), it.rows())
+                Utils.matToBitmap(it, warpedBmp)
+                warpedBmp
+            } ?: result.bitmap
+        )
 
         if (result.quad == null) {
             status("No paper detected")
