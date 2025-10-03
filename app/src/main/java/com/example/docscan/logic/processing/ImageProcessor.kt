@@ -14,14 +14,18 @@ object ImageProcessor {
 
     data class Result(
         val bitmap: Bitmap,        // preview with contour
-        val quad: Array<Point>?,   // detected quad points
-        val warped: Mat?,          // warped Mat (scan result)
-        val file: File?            // saved JPEG (for PDF use)
+        val quad: Array<Point>?,    // detected quad points
+        val warped: Mat?,           // raw warped document
+        val gray: Mat?,             // enhanced grayscale
+        val bw: Mat?,               // enhanced black & white
+        val color: Mat?,            // enhanced color
+        val file: File?             // saved JPEG (original warped)
     )
 
     fun processDocument(
         orig: Bitmap,
-        outFile: File? = null
+        outFile: File? = null,
+        modes: Set<String> = setOf("gray", "bw", "color")
     ): Result {
         // Ensure ARGB_8888
         val srcBmp = if (orig.config != Bitmap.Config.ARGB_8888)
@@ -30,7 +34,7 @@ object ImageProcessor {
         val src = Mat(srcBmp.height, srcBmp.width, CvType.CV_8UC4)
         Utils.bitmapToMat(srcBmp, src)
 
-        // --- Resize like Python ---
+        // --- Resize ---
         val maxSide = 1000.0
         val h = src.rows()
         val w = src.cols()
@@ -52,6 +56,10 @@ object ImageProcessor {
         var quad: Array<Point>? = null
         var warped: Mat? = null
         var outBmp: Bitmap
+
+        var warpedGray: Mat? = null
+        var warpedBW: Mat? = null
+        var warpedColor: Mat? = null
 
         try {
             // Preprocess
@@ -84,24 +92,30 @@ object ImageProcessor {
                 val c2f = MatOfPoint2f(*c.toArray())
                 val peri = Imgproc.arcLength(c2f, true)
                 val approx = MatOfPoint2f()
-                Imgproc.approxPolyDP(c2f, approx, 0.08 * peri, true) // looser like Python
+                Imgproc.approxPolyDP(c2f, approx, 0.08 * peri, true)
 
                 val pts = approx.toArray()
                 if (pts.size == 4) {
-                    // scale back to original coords
                     quad = pts.map { Point(it.x / scaleFactor, it.y / scaleFactor) }.toTypedArray()
                     warped = fourPointWarp(src, quad!!)
                     break
                 }
             }
 
-            // --- Fallback with minAreaRect ---
+            // Fallback
             if (quad == null && contours.isNotEmpty()) {
                 val rect = Imgproc.minAreaRect(MatOfPoint2f(*contours[0].toArray()))
                 val boxPts = arrayOf(Point(), Point(), Point(), Point())
-                rect.points(boxPts) // fills array in-place
+                rect.points(boxPts)
                 quad = boxPts.map { Point(it.x / scaleFactor, it.y / scaleFactor) }.toTypedArray()
                 warped = fourPointWarp(src, quad!!)
+            }
+
+            // Enhancements
+            if (warped != null) {
+                if ("gray" in modes) warpedGray = enhanceDocument(warped, "gray")
+                if ("bw" in modes) warpedBW = enhanceDocument(warped, "bw")
+                if ("color" in modes) warpedColor = enhanceDocument(warped, "color")
             }
 
             // Draw contour on preview
@@ -130,7 +144,7 @@ object ImageProcessor {
                 savedFile = outFile
             }
 
-            return Result(outBmp, quad, warped, savedFile)
+            return Result(outBmp, quad, warped, warpedGray, warpedBW, warpedColor, savedFile)
 
         } finally {
             src.release()
@@ -179,5 +193,41 @@ object ImageProcessor {
         val warped = Mat()
         Imgproc.warpPerspective(image, warped, M, Size(maxWidth.toDouble(), maxHeight.toDouble()))
         return warped
+    }
+
+    private fun enhanceDocument(src: Mat, mode: String): Mat {
+        val dst = Mat()
+        when (mode) {
+            "color" -> {
+                src.convertTo(dst, -1, 1.5, 0.0) // contrast gain
+                val gray = Mat()
+                Imgproc.cvtColor(dst, gray, Imgproc.COLOR_RGBA2GRAY)
+                val mask = Mat()
+                Imgproc.adaptiveThreshold(
+                    gray, mask, 255.0,
+                    Imgproc.ADAPTIVE_THRESH_MEAN_C,
+                    Imgproc.THRESH_BINARY_INV,
+                    15, 15.0
+                )
+                dst.setTo(Scalar(255.0, 255.0, 255.0))
+                src.copyTo(dst, mask)
+                gray.release()
+                mask.release()
+            }
+            "bw" -> {
+                Imgproc.cvtColor(src, dst, Imgproc.COLOR_RGBA2GRAY)
+                Imgproc.adaptiveThreshold(
+                    dst, dst, 255.0,
+                    Imgproc.ADAPTIVE_THRESH_MEAN_C,
+                    Imgproc.THRESH_BINARY,
+                    15, 15.0
+                )
+            }
+            "gray" -> {
+                Imgproc.cvtColor(src, dst, Imgproc.COLOR_RGBA2GRAY)
+            }
+            else -> src.copyTo(dst)
+        }
+        return dst
     }
 }
