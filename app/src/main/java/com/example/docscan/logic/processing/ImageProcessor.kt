@@ -175,29 +175,57 @@ object ImageProcessor {
         return arrayOf(tl, tr, br, bl)
     }
 
-    private fun fourPointWarp(image: Mat, pts: Array<Point>): Mat {
+//    private fun fourPointWarp(image: Mat, pts: Array<Point>): Mat {
+//        val rect = orderQuadClockwise(pts)
+//        val (tl, tr, br, bl) = rect
+//
+//        val widthA = hypot(br.x - bl.x, br.y - bl.y)
+//        val widthB = hypot(tr.x - tl.x, tr.y - tl.y)
+//        val maxWidth = max(widthA, widthB).toInt()
+//
+//        val heightA = hypot(tr.x - br.x, tr.y - br.y)
+//        val heightB = hypot(tl.x - bl.x, tl.y - bl.y)
+//        val maxHeight = max(heightA, heightB).toInt()
+//
+//        val srcPts = MatOfPoint2f(tl, tr, br, bl)
+//        val dstPts = MatOfPoint2f(
+//            Point(0.0, 0.0),
+//            Point((maxWidth - 1).toDouble(), 0.0),
+//            Point((maxWidth - 1).toDouble(), (maxHeight - 1).toDouble()),
+//            Point(0.0, (maxHeight - 1).toDouble())
+//        )
+//
+//        val M = Imgproc.getPerspectiveTransform(srcPts, dstPts)
+//        val warped = Mat()
+//        Imgproc.warpPerspective(image, warped, M, Size(maxWidth.toDouble(), maxHeight.toDouble()))
+//        return warped
+//    }
+
+    private fun fourPointWarp(image: Mat, pts: Array<Point>, mode: String = "auto"): Mat {
         val rect = orderQuadClockwise(pts)
         val (tl, tr, br, bl) = rect
 
         val widthA = hypot(br.x - bl.x, br.y - bl.y)
         val widthB = hypot(tr.x - tl.x, tr.y - tl.y)
-        val maxWidth = max(widthA, widthB).toInt()
-
         val heightA = hypot(tr.x - br.x, tr.y - br.y)
         val heightB = hypot(tl.x - bl.x, tl.y - bl.y)
-        val maxHeight = max(heightA, heightB).toInt()
+
+        val (targetW, targetH) = when (mode) {
+            "a4" -> 1240 to 1754
+            else -> ((widthA + widthB) / 2.0).toInt() to ((heightA + heightB) / 2.0).toInt()
+        }
 
         val srcPts = MatOfPoint2f(tl, tr, br, bl)
         val dstPts = MatOfPoint2f(
             Point(0.0, 0.0),
-            Point((maxWidth - 1).toDouble(), 0.0),
-            Point((maxWidth - 1).toDouble(), (maxHeight - 1).toDouble()),
-            Point(0.0, (maxHeight - 1).toDouble())
+            Point((targetW - 1).toDouble(), 0.0),
+            Point((targetW - 1).toDouble(), (targetH - 1).toDouble()),
+            Point(0.0, (targetH - 1).toDouble())
         )
 
         val M = Imgproc.getPerspectiveTransform(srcPts, dstPts)
         val warped = Mat()
-        Imgproc.warpPerspective(image, warped, M, Size(maxWidth.toDouble(), maxHeight.toDouble()))
+        Imgproc.warpPerspective(image, warped, M, Size(targetW.toDouble(), targetH.toDouble()))
         return warped
     }
 
@@ -208,15 +236,26 @@ object ImageProcessor {
                 src.convertTo(dst, -1, 1.5, 0.0) // contrast gain
                 val gray = Mat()
                 Imgproc.cvtColor(dst, gray, Imgproc.COLOR_RGBA2GRAY)
+
+                val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
+                val claheOut = Mat()
+                clahe.apply(gray, claheOut)
+
+                val blur = Mat()
+                Imgproc.GaussianBlur(claheOut, blur, Size(0.0, 0.0), 3.0)
+                Core.addWeighted(claheOut, 1.5, blur, -0.5, 0.0, dst)
+
                 val mask = Mat()
                 Imgproc.adaptiveThreshold(
-                    gray, mask, 255.0,
+                    claheOut, mask, 255.0,
                     Imgproc.ADAPTIVE_THRESH_MEAN_C,
                     Imgproc.THRESH_BINARY_INV,
-                    15, 15.0
+                    31, 5.0
                 )
                 dst.setTo(Scalar(255.0, 255.0, 255.0))
                 src.copyTo(dst, mask)
+                claheOut.release()
+                blur.release()
                 gray.release()
                 mask.release()
             }
