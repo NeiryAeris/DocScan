@@ -234,24 +234,30 @@ object ImageProcessor {
         when (mode) {
             "color" -> {
                 src.convertTo(dst, -1, 1.5, 0.0) // contrast gain
+
                 val gray = Mat()
                 Imgproc.cvtColor(dst, gray, Imgproc.COLOR_RGBA2GRAY)
 
-                val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
+                val clahe = Imgproc.createCLAHE(3.0, Size(4.0, 4.0))
                 val claheOut = Mat()
                 clahe.apply(gray, claheOut)
 
                 val blur = Mat()
                 Imgproc.GaussianBlur(claheOut, blur, Size(0.0, 0.0), 3.0)
-                Core.addWeighted(claheOut, 1.5, blur, -0.5, 0.0, dst)
+                Core.addWeighted(claheOut, 1.7, blur, -0.7, 0.0, dst)
 
                 val mask = Mat()
                 Imgproc.adaptiveThreshold(
                     claheOut, mask, 255.0,
                     Imgproc.ADAPTIVE_THRESH_MEAN_C,
                     Imgproc.THRESH_BINARY_INV,
-                    31, 5.0
+                    45, 35.0
                 )
+
+                // reconnect broken letters
+                val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(2.0, 2.0))
+                Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_CLOSE, kernel)
+
                 dst.setTo(Scalar(255.0, 255.0, 255.0))
                 src.copyTo(dst, mask)
                 claheOut.release()
