@@ -238,7 +238,7 @@ object ImageProcessor {
                 val gray = Mat()
                 Imgproc.cvtColor(dst, gray, Imgproc.COLOR_RGBA2GRAY)
 
-                val clahe = Imgproc.createCLAHE(3.0, Size(4.0, 4.0))
+                val clahe = Imgproc.createCLAHE(4.0, Size(2.0, 2.0))
                 val claheOut = Mat()
                 clahe.apply(gray, claheOut)
 
