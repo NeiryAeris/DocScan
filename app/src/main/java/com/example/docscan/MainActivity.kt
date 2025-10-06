@@ -1,7 +1,6 @@
 package com.example.docscan
 
 import android.Manifest
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
@@ -12,6 +11,7 @@ import android.widget.*
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
+import androidx.core.graphics.createBitmap
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import com.example.docscan.logic.camera.CameraController
@@ -27,7 +27,6 @@ import org.opencv.android.Utils
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import androidx.core.graphics.createBitmap
 
 class MainActivity : ComponentActivity() {
 
@@ -42,6 +41,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var debugScroll: ScrollView
     private lateinit var debugText: TextView
     private var debugVisible = false
+
+    // Gallery-style result preview
+    private lateinit var resultContainer: LinearLayout
+    private lateinit var fullImageView: ImageView
+    private lateinit var btnBackToCamera: Button
 
     private lateinit var cameraController: CameraController
     private lateinit var fileStore: PhotoFileStore
@@ -122,6 +126,36 @@ class MainActivity : ComponentActivity() {
         controls.addView(debugToggle)
 
         root.addView(controls)
+
+        // ---------- Fullscreen processed image (hidden initially) ----------
+        resultContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT
+            )
+            gravity = Gravity.CENTER
+            visibility = android.view.View.GONE
+        }
+
+        fullImageView = ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        resultContainer.addView(fullImageView)
+
+        btnBackToCamera = Button(this).apply {
+            text = "← Back to Camera"
+            setOnClickListener { returnToCamera() }
+        }
+        resultContainer.addView(btnBackToCamera)
+
+        root.addView(resultContainer)
 
         // ---------- Bottom image preview ----------
         bottomImageView = ImageView(this).apply {
@@ -245,13 +279,20 @@ class MainActivity : ComponentActivity() {
             ImageProcessor.processDocument(bitmap, outFile = warpedOut)
         }
 
-        bottomImageView.setImageBitmap(
-            result.warped?.let {
-                val warpedBmp = createBitmap(it.cols(), it.rows())
-                Utils.matToBitmap(it, warpedBmp)
-                warpedBmp
-            } ?: result.bitmap
-        )
+        val enhancedBitmap = result.enhanced?.let {
+            val warpedBmp = createBitmap(it.cols(), it.rows())
+            Utils.matToBitmap(it, warpedBmp)
+            warpedBmp
+        } ?: result.bitmap
+
+        bottomImageView.setImageBitmap(enhancedBitmap)
+
+        // Show fullscreen preview
+        fullImageView.setImageBitmap(enhancedBitmap)
+        previewView.visibility = android.view.View.GONE
+        btnCapture.visibility = android.view.View.GONE
+        btnPick.visibility = android.view.View.GONE
+        resultContainer.visibility = android.view.View.VISIBLE
 
         if (result.quad == null) {
             status("No paper detected")
@@ -264,6 +305,14 @@ class MainActivity : ComponentActivity() {
                 DebugLog.i("Warped saved at: ${it.absolutePath}")
             }
         }
+    }
+
+    private fun returnToCamera() {
+        resultContainer.visibility = android.view.View.GONE
+        previewView.visibility = android.view.View.VISIBLE
+        btnCapture.visibility = android.view.View.VISIBLE
+        btnPick.visibility = android.view.View.VISIBLE
+        status("Ready")
     }
 
     private suspend fun awaitCaptureToFile(target: File): File =
