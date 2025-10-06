@@ -16,16 +16,17 @@ object ImageProcessor {
         val bitmap: Bitmap,        // preview with contour
         val quad: Array<Point>?,    // detected quad points
         val warped: Mat?,           // raw warped document
-        val gray: Mat?,             // enhanced grayscale
-        val bw: Mat?,               // enhanced black & white
-        val color: Mat?,            // enhanced color
+//        val gray: Mat?,             // enhanced grayscale
+//        val bw: Mat?,               // enhanced black & white
+//        val color: Mat?,            // enhanced color
+        val enhanced: Mat?,
         val file: File?             // saved JPEG (original warped)
     )
 
     fun processDocument(
         orig: Bitmap,
         outFile: File? = null,
-        modes: Set<String> = setOf("gray", "bw", "color")
+//        modes: Set<String> = setOf("gray", "bw", "color")
     ): Result {
         // Ensure ARGB_8888
         val srcBmp = if (orig.config != Bitmap.Config.ARGB_8888)
@@ -57,9 +58,10 @@ object ImageProcessor {
         var warped: Mat? = null
         var outBmp: Bitmap
 
-        var warpedGray: Mat? = null
-        var warpedBW: Mat? = null
-        var warpedColor: Mat? = null
+//        var warpedGray: Mat? = null
+//        var warpedBW: Mat? = null
+//        var warpedColor: Mat? = null
+        var warpedEnhanced: Mat? = null
 
         try {
             // Preprocess
@@ -112,11 +114,14 @@ object ImageProcessor {
             }
 
             // Enhancements
-            if (warped != null) {
-                if ("gray" in modes) warpedGray = enhanceDocument(warped, "gray")
-                if ("bw" in modes) warpedBW = enhanceDocument(warped, "bw")
-                if ("color" in modes) warpedColor = enhanceDocument(warped, "color")
-            }
+//            if (warped != null) {
+//                if ("gray" in modes) warpedGray = enhanceDocument(warped, "gray")
+//                if ("bw" in modes) warpedBW = enhanceDocument(warped, "bw")
+//                if ("color" in modes) warpedColor = enhanceDocument(warped, "color")
+//            }
+            if (warped != null) warpedEnhanced = enhanceDocument(warped, "color")
+
+
 
             // Draw contour on preview
             val previewMat = src.clone()
@@ -135,16 +140,17 @@ object ImageProcessor {
 
             // Save warped if needed
             var savedFile: File? = null
-            if (outFile != null && warped != null) {
-                val warpedBmp = createBitmap(warped.cols(), warped.rows())
-                Utils.matToBitmap(warped, warpedBmp)
+            if (outFile != null && warpedEnhanced != null) {
+                val warpedBmp = createBitmap(warpedEnhanced.cols(), warpedEnhanced.rows())
+                Utils.matToBitmap(warpedEnhanced, warpedBmp)
                 FileOutputStream(outFile).use { fos ->
                     warpedBmp.compress(Bitmap.CompressFormat.JPEG, 95, fos)
                 }
                 savedFile = outFile
             }
 
-            return Result(outBmp, quad, warped, warpedGray, warpedBW, warpedColor, savedFile)
+//            return Result(outBmp, quad, warped, warpedGray, warpedBW, warpedColor,warpedEnhanced , savedFile)
+            return Result(outBmp, quad, warped, warpedEnhanced , savedFile)
 
         } finally {
             src.release()
