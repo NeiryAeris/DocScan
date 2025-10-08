@@ -77,4 +77,7 @@ dependencies {
 
     // Unsure external dependency
     implementation(libs.core)
+
+    //File ops
+    implementation(libs.itextg)
 }

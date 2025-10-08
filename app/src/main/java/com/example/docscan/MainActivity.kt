@@ -16,6 +16,7 @@ import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import com.example.docscan.logic.camera.CameraController
 import com.example.docscan.logic.io.PhotoFileStore
+import com.example.docscan.logic.io.PdfFileStore
 import com.example.docscan.logic.processing.ImageProcessor
 import com.example.docscan.logic.utils.DebugLog
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +35,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var bottomImageView: ImageView
     private lateinit var btnCapture: Button
     private lateinit var btnPick: Button
+    private lateinit var btnSavePdf: Button
     private lateinit var statusView: TextView
 
     // Debug UI
@@ -49,6 +51,9 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var cameraController: CameraController
     private lateinit var fileStore: PhotoFileStore
+
+    // Store multiple scanned images
+    private val scannedFiles = mutableListOf<File>()
 
     private val requestCameraPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -106,10 +111,16 @@ class MainActivity : ComponentActivity() {
         controls.addView(btnCapture)
 
         btnPick = Button(this).apply {
-            text = "Pick from Gallery"
+            text = "Pick"
             setOnClickListener { pickImageLauncher.launch("image/*") }
         }
         controls.addView(btnPick)
+
+        btnSavePdf = Button(this).apply {
+            text = "Save PDF"
+            setOnClickListener { onSavePdfClicked() }
+        }
+        controls.addView(btnSavePdf)
 
         statusView = TextView(this).apply {
             text = "Ready"
@@ -127,7 +138,7 @@ class MainActivity : ComponentActivity() {
 
         root.addView(controls)
 
-        // ---------- Fullscreen processed image (hidden initially) ----------
+        // ---------- Fullscreen processed image ----------
         resultContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -150,7 +161,7 @@ class MainActivity : ComponentActivity() {
         resultContainer.addView(fullImageView)
 
         btnBackToCamera = Button(this).apply {
-            text = "← Back to Camera"
+            text = "← Back"
             setOnClickListener { returnToCamera() }
         }
         resultContainer.addView(btnBackToCamera)
@@ -275,7 +286,7 @@ class MainActivity : ComponentActivity() {
 
     private suspend fun processAndShow(bitmap: android.graphics.Bitmap) {
         val result = withContext(Dispatchers.Default) {
-            val warpedOut = File(getExternalFilesDir(null), "scanned_page.jpg")
+            val warpedOut = File(getExternalFilesDir(null), "scanned_page_${System.currentTimeMillis()}.jpg")
             ImageProcessor.processDocument(bitmap, outFile = warpedOut)
         }
 
@@ -285,26 +296,20 @@ class MainActivity : ComponentActivity() {
             warpedBmp
         } ?: result.bitmap
 
-        bottomImageView.setImageBitmap(enhancedBitmap)
+        // Add to list for PDF export
+        result.file?.let { scannedFiles.add(it) }
 
-        // Show fullscreen preview
+        bottomImageView.setImageBitmap(enhancedBitmap)
         fullImageView.setImageBitmap(enhancedBitmap)
+
         previewView.visibility = android.view.View.GONE
         btnCapture.visibility = android.view.View.GONE
         btnPick.visibility = android.view.View.GONE
+        btnSavePdf.visibility = android.view.View.GONE
         resultContainer.visibility = android.view.View.VISIBLE
 
-        if (result.quad == null) {
-            status("No paper detected")
-            toast("No paper detected")
-        } else {
-            status("Contour drawn & warped")
-            toast("Contour drawn")
-            DebugLog.i("Quad: " + result.quad.joinToString { "(${it.x.toInt()},${it.y.toInt()})" })
-            result.file?.let {
-                DebugLog.i("Warped saved at: ${it.absolutePath}")
-            }
-        }
+        status("Captured page ${scannedFiles.size}")
+        toast("Captured page ${scannedFiles.size}")
     }
 
     private fun returnToCamera() {
@@ -312,7 +317,31 @@ class MainActivity : ComponentActivity() {
         previewView.visibility = android.view.View.VISIBLE
         btnCapture.visibility = android.view.View.VISIBLE
         btnPick.visibility = android.view.View.VISIBLE
-        status("Ready")
+        btnSavePdf.visibility = android.view.View.VISIBLE
+        status("Ready for next page")
+    }
+
+    private fun onSavePdfClicked() {
+        if (scannedFiles.isEmpty()) {
+            toast("No pages scanned yet")
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                status("Creating PDF…")
+                val pdfStore = PdfFileStore(this@MainActivity)
+                val pdfFile = withContext(Dispatchers.IO) {
+                    pdfStore.createPdfFromImages(scannedFiles)
+                }
+                status("PDF saved at: ${pdfFile.name}")
+                toast("PDF saved: ${pdfFile.name}")
+                DebugLog.i("PDF saved: ${pdfFile.absolutePath}")
+                scannedFiles.clear() // reset after saving
+            } catch (t: Throwable) {
+                status("PDF error: ${t.message}")
+                toast("Error: ${t.message}")
+            }
+        }
     }
 
     private suspend fun awaitCaptureToFile(target: File): File =
