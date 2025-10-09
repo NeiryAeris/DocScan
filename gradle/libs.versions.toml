@@ -20,6 +20,10 @@ ui = "1.10.0-alpha03"
 foundation = "1.10.0-alpha03"
 uiToolingPreview = "1.10.0-alpha03"
 uiTooling = "1.10.0-alpha03"
+navigationCompose = "2.9.5"
+materialIconsExtendedAndroid = "1.7.8"
+material = "1.10.0-alpha05"
+materialVersion = "1.14.0-alpha05"
 
 [libraries]
 androidx-activity-compose-v193 = { module = "androidx.activity:activity-compose", version.ref = "activityComposeVersion" }
@@ -55,6 +59,10 @@ ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 androidx-compose-ui-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview", version.ref = "uiToolingPreview" }
 androidx-compose-ui-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling", version.ref = "uiTooling" }
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+androidx-material-icons-extended-android = { group = "androidx.compose.material", name = "material-icons-extended-android", version.ref = "materialIconsExtendedAndroid" }
+androidx-material = { group = "androidx.compose.material", name = "material", version.ref = "material" }
+material = { group = "com.google.android.material", name = "material", version.ref = "materialVersion" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

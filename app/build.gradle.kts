@@ -51,7 +51,11 @@ dependencies {
     implementation(libs.androidx.activity.compose)
 
     // Tooling for @Preview
-    implementation(libs.androidx.ui.tooling.preview)   // gives you @Preview annotation
+    implementation(libs.androidx.ui.tooling.preview)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.material.icons.extended.android)
+    implementation(libs.androidx.material)
+    implementation(libs.material)   // gives you @Preview annotation
     debugImplementation(libs.androidx.ui.tooling)      // interactive preview in Android Studio
 
     // CameraX
@@ -80,4 +84,5 @@ dependencies {
 
     //File ops
     implementation(libs.itextg)
+
 }
