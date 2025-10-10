@@ -13,9 +13,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavHostController
 
 @Composable
-fun ProfileScreen() {
+fun ProfileScreen(navController: NavHostController) {
     LazyColumn {
         item {
             // Upgrade section
@@ -37,24 +38,24 @@ fun ProfileScreen() {
         }
 
         // Profile options
-        item { ProfileItem(icon = Icons.Default.Cloud, title = "Đám mây") }
-        item { ProfileItem(icon = Icons.Default.CheckCircle, title = "Nhiệm vụ") }
-        item { ProfileItem(icon = Icons.Default.MonetizationOn, title = "Số dư điểm C", "0 điểm") }
-        item { Divider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp)) }
-        item { ProfileItem(icon = Icons.Default.AccountCircle, title = "Tài khoản") }
-        item { ProfileItem(icon = Icons.Default.CardGiftcard, title = "Lợi ích EDU", "Premium miễn phí") }
-        item { ProfileItem(icon = Icons.Default.Sync, title = "Đồng bộ") }
-        item { Divider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp)) }
-        item { ProfileItem(icon = Icons.Default.Settings, title = "Cài đặt khác") }
+        item { ProfileItem(icon = Icons.Default.Cloud, title = "Đám mây") { navController.navigate("scan") } }
+        item { ProfileItem(icon = Icons.Default.CheckCircle, title = "Nhiệm vụ") { navController.navigate("scan") } }
+        item { ProfileItem(icon = Icons.Default.MonetizationOn, title = "Số dư điểm C", "0 điểm") { /* maybe open balance */ } }
+        item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp)) }
+        item { ProfileItem(icon = Icons.Default.AccountCircle, title = "Tài khoản") { navController.navigate("profile") } }
+        item { ProfileItem(icon = Icons.Default.CardGiftcard, title = "Lợi ích EDU", "Premium miễn phí") { /*TODO*/ } }
+        item { ProfileItem(icon = Icons.Default.Sync, title = "Đồng bộ") { /*TODO*/ } }
+        item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp)) }
+        item { ProfileItem(icon = Icons.Default.Settings, title = "Cài đặt khác") { /*TODO*/ } }
     }
 }
 
 @Composable
-fun ProfileItem(icon: ImageVector, title: String, subtitle: String? = null) {
+fun ProfileItem(icon: ImageVector, title: String, subtitle: String? = null, onClick: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { }
+            .clickable { onClick() }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

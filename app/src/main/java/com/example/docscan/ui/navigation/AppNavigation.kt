@@ -14,19 +14,16 @@ fun AppNavigation(navController: NavHostController) {
     // dựa trên route (đường dẫn) hiện tại.
     NavHost(navController, startDestination = BottomNavItem.Home.route) {
         composable(BottomNavItem.Home.route) {
-            HomeScreen()
+            HomeScreen(navController)
         }
         composable(BottomNavItem.Files.route) {
-            // Thay thế bằng màn hình FilesScreen của bạn khi đã tạo
-            // FilesScreen()
+            FilesScreen(navController)
         }
         composable(BottomNavItem.Tools.route) {
-            // Thay thế bằng màn hình ToolsScreen của bạn khi đã tạo
-            // ToolsScreen()
+            ToolsScreen(navController)
         }
         composable(BottomNavItem.Profile.route) {
-            // Thay thế bằng màn hình ProfileScreen của bạn khi đã tạo
-            // ProfileScreen()
+            ProfileScreen(navController)
         }
     }
 }

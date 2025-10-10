@@ -9,11 +9,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
 import com.example.docscan.ui.components.DocumentCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FilesScreen() {
+fun FilesScreen(navController: NavHostController) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
             // Top Bar
