@@ -59,19 +59,19 @@ fun Preview_ActionGrid_3Cols() {
     }
 }
 
-@Preview(name = "Grid • long labels • fontScale 1.3", showBackground = true, device = Devices.PIXEL_7)
-@PreviewFontScale // Uses default 1.2; combine with name to indicate intent
-@Composable
-fun Preview_ActionGrid_LongLabels() {
-    val longItems = sampleItems.mapIndexed { index, it ->
-        // Make every second label longer to test wrapping
-        if (index % 2 == 0) it.copy(label = it.label + " • ultra long label to test wrapping")
-        else it
-    }
-    PreviewSurface {
-        ActionGrid(items = longItems, columnCount = 4)
-    }
-}
+//@Preview(name = "Grid • long labels • fontScale 1.3", showBackground = true, device = Devices.PIXEL_7)
+//@PreviewFontScale // Uses default 1.2; combine with name to indicate intent
+//@Composable
+//fun Preview_ActionGrid_LongLabels() {
+//    val longItems = sampleItems.mapIndexed { index, it ->
+//        // Make every second label longer to test wrapping
+//        if (index % 2 == 0) it.copy(label = it.label + " • ultra long label to test wrapping")
+//        else it
+//    }
+//    PreviewSurface {
+//        ActionGrid(items = longItems, columnCount = 4)
+//    }
+//}
 
 // ---------- Item & SectionTitle previews ----------
 @Preview(name = "Item", showBackground = true)
