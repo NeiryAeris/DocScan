@@ -8,8 +8,10 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
 import com.example.docscan.ui.components.ActionGrid
 import com.example.docscan.ui.components.ActionItemData
 import com.example.docscan.ui.components.DocumentCard
@@ -52,4 +54,10 @@ fun HomeScreen(navController: NavHostController) {
             DocumentCard(title = "CamScanner 09-10-2025 20.16", date = "09/10/2025 20:16", pageCount = 1)
         }
     }
+}
+
+@Preview(name = "HomeScreen Preview", showBackground = true)
+@Composable
+fun Preview_HomeScreen() {
+    HomeScreen(navController = rememberNavController())
 }

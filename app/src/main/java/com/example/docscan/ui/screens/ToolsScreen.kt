@@ -10,6 +10,8 @@ import androidx.navigation.NavHostController
 import com.example.docscan.ui.components.ActionGrid
 import com.example.docscan.ui.components.ActionItemData
 import com.example.docscan.ui.components.SectionTitle
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.navigation.compose.rememberNavController
 
 @Composable
 fun ToolsScreen(navController: NavHostController) {
@@ -40,4 +42,10 @@ fun ToolsScreen(navController: NavHostController) {
         item { SectionTitle("Chuyển đổi") }
         item { ActionGrid(convertActions) }
     }
+}
+
+@Preview(name = "ToolsScreen Preview", showBackground = true)
+@Composable
+fun Preview_ToolsScreen() {
+    ToolsScreen(navController = rememberNavController())
 }

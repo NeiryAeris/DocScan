@@ -14,6 +14,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.navigation.compose.rememberNavController
 
 @Composable
 fun ProfileScreen(navController: NavHostController) {
@@ -68,4 +70,10 @@ fun ProfileItem(icon: ImageVector, title: String, subtitle: String? = null, onCl
             Text(subtitle, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
         }
     }
+}
+
+@Preview(name = "ProfileScreen Preview", showBackground = true)
+@Composable
+fun Preview_ProfileScreen() {
+    ProfileScreen(navController = rememberNavController())
 }
