@@ -4,8 +4,10 @@ package com.example.docscan.ui
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -115,7 +117,7 @@ fun MainScreen() {
 
             // Simple destinations for actions
             composable("scan") { CameraScreen() }
-            composable("import_image") { SimplePlaceholderScreen(title = "Import Image") }
+            composable("import_image") { ImportImageScreen() }
             composable("pdf_tools") { SimplePlaceholderScreen(title = "PDF Tools") }
             composable("text_extraction") { SimplePlaceholderScreen(title = "Text Extraction") }
         }
@@ -227,6 +229,30 @@ fun CameraScreen() {
     DisposableEffect(Unit) {
         onDispose {
             cameraController.unbindAll()
+        }
+    }
+}
+
+@Composable
+fun ImportImageScreen() {
+    val context = LocalContext.current
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        selectedImageUri = uri
+        // TODO: Pass uri to your logic for processing, e.g., FileOps.loadImageFromUri(context, uri)
+    }
+
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text(text = "Import Image", style = MaterialTheme.typography.titleLarge)
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = { launcher.launch("image/*") }) {
+            Text("Select Image from Device")
+        }
+        selectedImageUri?.let { uri ->
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(text = "Selected: ${uri.path}")
+            // Optionally show a preview
+            Image(painter = rememberAsyncImagePainter(uri), contentDescription = null, modifier = Modifier.size(200.dp))
         }
     }
 }

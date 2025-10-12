@@ -1,6 +1,7 @@
 package com.example.docscan.logic.processing
 
 import android.graphics.Bitmap
+import androidx.core.graphics.createBitmap
 import org.opencv.android.Utils
 import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
@@ -8,25 +9,20 @@ import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.hypot
 import kotlin.math.max
-import androidx.core.graphics.createBitmap
 
 object ImageProcessor {
 
     data class Result(
         val bitmap: Bitmap,        // preview with contour
-        val quad: Array<Point>?,    // detected quad points
-        val warped: Mat?,           // raw warped document
-//        val gray: Mat?,             // enhanced grayscale
-//        val bw: Mat?,               // enhanced black & white
-//        val color: Mat?,            // enhanced color
-        val enhanced: Mat?,
-        val file: File?             // saved JPEG (original warped)
+        val quad: Array<Point>?,   // detected quad points
+        val warped: Mat?,          // raw warped document
+        val enhanced: Mat?,        // enhanced final image
+        val file: File?            // saved JPEG (enhanced)
     )
 
     fun processDocument(
         orig: Bitmap,
-        outFile: File? = null,
-//        modes: Set<String> = setOf("gray", "bw", "color")
+        outFile: File? = null
     ): Result {
         // Ensure ARGB_8888
         val srcBmp = if (orig.config != Bitmap.Config.ARGB_8888)
@@ -35,17 +31,16 @@ object ImageProcessor {
         val src = Mat(srcBmp.height, srcBmp.width, CvType.CV_8UC4)
         Utils.bitmapToMat(srcBmp, src)
 
-        // --- Resize ---
+        // --- Resize for detection speed ---
         val maxSide = 1000.0
         val h = src.rows()
         val w = src.cols()
         val scaleFactor = if (max(w, h) > maxSide) maxSide / max(w, h) else 1.0
         val small = Mat()
-        if (scaleFactor != 1.0) {
+        if (scaleFactor != 1.0)
             Imgproc.resize(src, small, Size(w * scaleFactor, h * scaleFactor))
-        } else {
+        else
             src.copyTo(small)
-        }
 
         val gray = Mat()
         val blurred = Mat()
@@ -56,12 +51,8 @@ object ImageProcessor {
 
         var quad: Array<Point>? = null
         var warped: Mat? = null
-        var outBmp: Bitmap
-
-//        var warpedGray: Mat? = null
-//        var warpedBW: Mat? = null
-//        var warpedColor: Mat? = null
         var warpedEnhanced: Mat? = null
+        val outBmp: Bitmap
 
         try {
             // Preprocess
@@ -69,12 +60,15 @@ object ImageProcessor {
             Imgproc.GaussianBlur(gray, blurred, Size(5.0, 5.0), 0.0)
 
             // Otsu threshold
-            Imgproc.threshold(blurred, binary, 0.0, 255.0, Imgproc.THRESH_BINARY + Imgproc.THRESH_OTSU)
+            Imgproc.threshold(
+                blurred, binary, 0.0, 255.0,
+                Imgproc.THRESH_BINARY + Imgproc.THRESH_OTSU
+            )
 
-            // Canny
+            // Canny edges
             Imgproc.Canny(binary, edges, 50.0, 150.0)
 
-            // Morph close
+            // Morphological close to fill gaps
             val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(7.0, 7.0))
             Imgproc.morphologyEx(edges, closed, Imgproc.MORPH_CLOSE, kernel)
 
@@ -86,7 +80,7 @@ object ImageProcessor {
             val imgArea = (small.rows() * small.cols()).toDouble()
             val maxArea = imgArea * 0.9
 
-            // Try top 15 contours
+            // Try top contours
             for (c in contours.take(15)) {
                 val area = Imgproc.contourArea(c)
                 if (area > maxArea) continue
@@ -104,7 +98,7 @@ object ImageProcessor {
                 }
             }
 
-            // Fallback
+            // Fallback to rectangle if no quad
             if (quad == null && contours.isNotEmpty()) {
                 val rect = Imgproc.minAreaRect(MatOfPoint2f(*contours[0].toArray()))
                 val boxPts = arrayOf(Point(), Point(), Point(), Point())
@@ -113,17 +107,51 @@ object ImageProcessor {
                 warped = fourPointWarp(src, quad!!)
             }
 
-            // Enhancements
-//            if (warped != null) {
-//                if ("gray" in modes) warpedGray = enhanceDocument(warped, "gray")
-//                if ("bw" in modes) warpedBW = enhanceDocument(warped, "bw")
-//                if ("color" in modes) warpedColor = enhanceDocument(warped, "color")
-//            }
-            if (warped != null) warpedEnhanced = enhanceDocument(warped, "color")
+            // ======================
+            // 📈 Post-warp enhancement
+            // ======================
+            if (warped != null) {
+                val enhanced = Mat()
+                Imgproc.cvtColor(warped, enhanced, Imgproc.COLOR_BGR2GRAY)
 
+                // 1️⃣ Adaptive histogram equalization (CLAHE)
+                val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
+                clahe.apply(enhanced, enhanced)
 
+                // 2️⃣ Denoise + sharpen
+                val smooth = Mat()
+                Imgproc.bilateralFilter(enhanced, smooth, 9, 75.0, 75.0)
+                Core.addWeighted(enhanced, 1.5, smooth, -0.5, 0.0, enhanced)
 
-            // Draw contour on preview
+                // 3️⃣ Adaptive thresholding for clear text
+                val finalEnhanced = Mat()
+                Imgproc.adaptiveThreshold(
+                    enhanced,
+                    finalEnhanced,
+                    255.0,
+                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    Imgproc.THRESH_BINARY,
+                    15,
+                    11.0
+                )
+
+                // 4️⃣ Morphological cleanup
+                val cleanKernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(2.0, 2.0))
+                Imgproc.morphologyEx(finalEnhanced, finalEnhanced, Imgproc.MORPH_OPEN, cleanKernel)
+
+                warpedEnhanced = finalEnhanced
+
+                // Save to disk if required
+                if (outFile != null) {
+                    val enhancedBitmap = Bitmap.createBitmap(finalEnhanced.cols(), finalEnhanced.rows(), Bitmap.Config.ARGB_8888)
+                    Utils.matToBitmap(finalEnhanced, enhancedBitmap)
+                    FileOutputStream(outFile).use { fos ->
+                        enhancedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, fos)
+                    }
+                }
+            }
+
+            // Draw detected contour overlay for preview
             val previewMat = src.clone()
             quad?.let {
                 Imgproc.polylines(
@@ -138,19 +166,7 @@ object ImageProcessor {
             Utils.matToBitmap(previewMat, outBmp)
             previewMat.release()
 
-            // Save warped if needed
-            var savedFile: File? = null
-            if (outFile != null && warpedEnhanced != null) {
-                val warpedBmp = createBitmap(warpedEnhanced.cols(), warpedEnhanced.rows())
-                Utils.matToBitmap(warpedEnhanced, warpedBmp)
-                FileOutputStream(outFile).use { fos ->
-                    warpedBmp.compress(Bitmap.CompressFormat.JPEG, 95, fos)
-                }
-                savedFile = outFile
-            }
-
-//            return Result(outBmp, quad, warped, warpedGray, warpedBW, warpedColor,warpedEnhanced , savedFile)
-            return Result(outBmp, quad, warped, warpedEnhanced , savedFile)
+            return Result(outBmp, quad, warped, warpedEnhanced, outFile)
 
         } finally {
             src.release()
@@ -165,6 +181,7 @@ object ImageProcessor {
     }
 
     // ---- helpers ----
+
     private fun orderQuadClockwise(pts: Array<Point>): Array<Point> {
         val sumSorted = pts.sortedBy { it.x + it.y }
         val tl = sumSorted.first()
@@ -174,32 +191,6 @@ object ImageProcessor {
         val tr = diffSorted.last()
         return arrayOf(tl, tr, br, bl)
     }
-
-//    private fun fourPointWarp(image: Mat, pts: Array<Point>): Mat {
-//        val rect = orderQuadClockwise(pts)
-//        val (tl, tr, br, bl) = rect
-//
-//        val widthA = hypot(br.x - bl.x, br.y - bl.y)
-//        val widthB = hypot(tr.x - tl.x, tr.y - tl.y)
-//        val maxWidth = max(widthA, widthB).toInt()
-//
-//        val heightA = hypot(tr.x - br.x, tr.y - br.y)
-//        val heightB = hypot(tl.x - bl.x, tl.y - bl.y)
-//        val maxHeight = max(heightA, heightB).toInt()
-//
-//        val srcPts = MatOfPoint2f(tl, tr, br, bl)
-//        val dstPts = MatOfPoint2f(
-//            Point(0.0, 0.0),
-//            Point((maxWidth - 1).toDouble(), 0.0),
-//            Point((maxWidth - 1).toDouble(), (maxHeight - 1).toDouble()),
-//            Point(0.0, (maxHeight - 1).toDouble())
-//        )
-//
-//        val M = Imgproc.getPerspectiveTransform(srcPts, dstPts)
-//        val warped = Mat()
-//        Imgproc.warpPerspective(image, warped, M, Size(maxWidth.toDouble(), maxHeight.toDouble()))
-//        return warped
-//    }
 
     private fun fourPointWarp(image: Mat, pts: Array<Point>, mode: String = "auto"): Mat {
         val rect = orderQuadClockwise(pts)
@@ -227,58 +218,5 @@ object ImageProcessor {
         val warped = Mat()
         Imgproc.warpPerspective(image, warped, M, Size(targetW.toDouble(), targetH.toDouble()))
         return warped
-    }
-
-    private fun enhanceDocument(src: Mat, mode: String): Mat {
-        val dst = Mat()
-        when (mode) {
-            "color" -> {
-                src.convertTo(dst, -1, 1.5, 0.0) // contrast gain
-
-                val gray = Mat()
-                Imgproc.cvtColor(dst, gray, Imgproc.COLOR_RGBA2GRAY)
-
-                val clahe = Imgproc.createCLAHE(4.0, Size(2.0, 2.0))
-                val claheOut = Mat()
-                clahe.apply(gray, claheOut)
-
-                val blur = Mat()
-                Imgproc.GaussianBlur(claheOut, blur, Size(0.0, 0.0), 3.0)
-                Core.addWeighted(claheOut, 1.7, blur, -0.7, 0.0, dst)
-
-                val mask = Mat()
-                Imgproc.adaptiveThreshold(
-                    claheOut, mask, 255.0,
-                    Imgproc.ADAPTIVE_THRESH_MEAN_C,
-                    Imgproc.THRESH_BINARY_INV,
-                    45, 35.0
-                )
-
-                // reconnect broken letters
-                val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(2.0, 2.0))
-                Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_CLOSE, kernel)
-
-                dst.setTo(Scalar(255.0, 255.0, 255.0))
-                src.copyTo(dst, mask)
-                claheOut.release()
-                blur.release()
-                gray.release()
-                mask.release()
-            }
-            "bw" -> {
-                Imgproc.cvtColor(src, dst, Imgproc.COLOR_RGBA2GRAY)
-                Imgproc.adaptiveThreshold(
-                    dst, dst, 255.0,
-                    Imgproc.ADAPTIVE_THRESH_MEAN_C,
-                    Imgproc.THRESH_BINARY,
-                    15, 15.0
-                )
-            }
-            "gray" -> {
-                Imgproc.cvtColor(src, dst, Imgproc.COLOR_RGBA2GRAY)
-            }
-            else -> src.copyTo(dst)
-        }
-        return dst
     }
 }
