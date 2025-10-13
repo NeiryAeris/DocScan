@@ -84,4 +84,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.material)
     implementation(libs.androidx.material.icons.extended.android)
+
+    //Wiring module
+    implementation(project(":pipeline-core"))
 }

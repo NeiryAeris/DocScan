@@ -15,4 +15,5 @@ dependencies {
     // Desktop OpenCV with org.opencv.* API + bundled natives
     implementation(libs.openpnp.opencv)
     testImplementation(kotlin("test"))
+//    implementation("nu.pattern:opencv:2.4.9-7")  // add this line
 }
