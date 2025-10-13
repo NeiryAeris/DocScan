@@ -5,6 +5,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -40,12 +41,15 @@ import com.example.docscan.ui.screens.ProfileScreen
 import com.example.docscan.ui.screens.ToolsScreen
 import com.example.docscan.logic.camera.CameraController
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.ui.graphics.asImageBitmap
+import coil.compose.rememberAsyncImagePainter
 import java.io.File
 import kotlinx.coroutines.launch
 
@@ -237,22 +241,51 @@ fun CameraScreen() {
 fun ImportImageScreen() {
     val context = LocalContext.current
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var enhancedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var isFullScreen by remember { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         selectedImageUri = uri
-        // TODO: Pass uri to your logic for processing, e.g., FileOps.loadImageFromUri(context, uri)
+        uri?.let {
+            val bitmap = com.example.docscan.logic.utils.FileOps.loadImageFromUri(context, it)
+            val result = com.example.docscan.logic.processing.ImageProcessor.processDocument(bitmap)
+            result.enhanced?.let { mat ->
+                val outBitmap = Bitmap.createBitmap(mat.cols(), mat.rows(), Bitmap.Config.ARGB_8888)
+                org.opencv.android.Utils.matToBitmap(mat, outBitmap)
+                enhancedBitmap = outBitmap
+            }
+        }
     }
 
-    Column(modifier = Modifier.padding(16.dp)) {
-        Text(text = "Import Image", style = MaterialTheme.typography.titleLarge)
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = { launcher.launch("image/*") }) {
-            Text("Select Image from Device")
+    if (isFullScreen && enhancedBitmap != null) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Image(bitmap = enhancedBitmap!!.asImageBitmap(), contentDescription = "Enhanced Image Fullscreen", modifier = Modifier.fillMaxSize())
+            Button(
+                onClick = { isFullScreen = false },
+                modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
+            ) {
+                Text("Back")
+            }
         }
-        selectedImageUri?.let { uri ->
+    } else {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = "Import Image", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.height(16.dp))
-            Text(text = "Selected: ${uri.path}")
-            // Optionally show a preview
-            Image(painter = rememberAsyncImagePainter(uri), contentDescription = null, modifier = Modifier.size(200.dp))
+            Button(onClick = { launcher.launch("image/*") }) {
+                Text("Select Image from Device")
+            }
+            selectedImageUri?.let { uri ->
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(text = "Selected: ${uri.path}")
+                Image(painter = rememberAsyncImagePainter(uri), contentDescription = null, modifier = Modifier.size(200.dp))
+            }
+            enhancedBitmap?.let { bitmap ->
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(text = "Enhanced Output:")
+                Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Enhanced Image", modifier = Modifier.size(200.dp))
+                Button(onClick = { isFullScreen = true }, modifier = Modifier.padding(top = 8.dp)) {
+                    Text("View Fullscreen")
+                }
+            }
         }
     }
 }

@@ -22,7 +22,8 @@ object ImageProcessor {
 
     fun processDocument(
         orig: Bitmap,
-        outFile: File? = null
+        outFile: File? = null,
+        mode: String = "auto"
     ): Result {
         // Ensure ARGB_8888
         val srcBmp = if (orig.config != Bitmap.Config.ARGB_8888)
@@ -107,60 +108,28 @@ object ImageProcessor {
                 warped = fourPointWarp(src, quad!!)
             }
 
-            // ======================
-            // 📈 Post-warp enhancement
-            // ======================
+            // === Enhancement ===
             if (warped != null) {
-                val enhanced = Mat()
-                Imgproc.cvtColor(warped, enhanced, Imgproc.COLOR_BGR2GRAY)
+                warpedEnhanced = enhanceDocument(warped, mode)
 
-                // 1️⃣ Adaptive histogram equalization (CLAHE)
-                val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
-                clahe.apply(enhanced, enhanced)
-
-                // 2️⃣ Denoise + sharpen
-                val smooth = Mat()
-                Imgproc.bilateralFilter(enhanced, smooth, 9, 75.0, 75.0)
-                Core.addWeighted(enhanced, 1.5, smooth, -0.5, 0.0, enhanced)
-
-                // 3️⃣ Adaptive thresholding for clear text
-                val finalEnhanced = Mat()
-                Imgproc.adaptiveThreshold(
-                    enhanced,
-                    finalEnhanced,
-                    255.0,
-                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
-                    Imgproc.THRESH_BINARY,
-                    15,
-                    11.0
-                )
-
-                // 4️⃣ Morphological cleanup
-                val cleanKernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(2.0, 2.0))
-                Imgproc.morphologyEx(finalEnhanced, finalEnhanced, Imgproc.MORPH_OPEN, cleanKernel)
-
-                warpedEnhanced = finalEnhanced
-
-                // Save to disk if required
-                if (outFile != null) {
-                    val enhancedBitmap = Bitmap.createBitmap(finalEnhanced.cols(), finalEnhanced.rows(), Bitmap.Config.ARGB_8888)
-                    Utils.matToBitmap(finalEnhanced, enhancedBitmap)
+                // save if needed
+                if (outFile != null && warpedEnhanced != null) {
+                    val enhancedBitmap = Bitmap.createBitmap(
+                        warpedEnhanced.cols(),
+                        warpedEnhanced.rows(),
+                        Bitmap.Config.ARGB_8888
+                    )
+                    Utils.matToBitmap(warpedEnhanced, enhancedBitmap)
                     FileOutputStream(outFile).use { fos ->
                         enhancedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, fos)
                     }
                 }
             }
 
-            // Draw detected contour overlay for preview
+            // === Preview contour overlay ===
             val previewMat = src.clone()
             quad?.let {
-                Imgproc.polylines(
-                    previewMat,
-                    listOf(MatOfPoint(*it)),
-                    true,
-                    Scalar(0.0, 255.0, 0.0),
-                    6
-                )
+                Imgproc.polylines(previewMat, listOf(MatOfPoint(*it)), true, Scalar(0.0, 255.0, 0.0), 6)
             }
             outBmp = createBitmap(previewMat.cols(), previewMat.rows())
             Utils.matToBitmap(previewMat, outBmp)
@@ -180,8 +149,68 @@ object ImageProcessor {
         }
     }
 
-    // ---- helpers ----
+    // ---- Enhancement filters ----
+    private fun enhanceDocument(src: Mat, mode: String): Mat {
+        val dst = Mat()
+        when (mode) {
+            "color" -> {
+                // Smart “Magic Color” enhancement
+                val contrast = Mat()
+                src.convertTo(contrast, -1, 1.3, 0.0)
 
+                val gray = Mat()
+                Imgproc.cvtColor(contrast, gray, Imgproc.COLOR_RGBA2GRAY)
+
+                val clahe = Imgproc.createCLAHE(3.0, Size(8.0, 8.0))
+                val claheOut = Mat()
+                clahe.apply(gray, claheOut)
+
+                val denoised = Mat()
+                Imgproc.bilateralFilter(claheOut, denoised, 7, 50.0, 50.0)
+                val sharpened = Mat()
+                Core.addWeighted(denoised, 1.4, claheOut, -0.4, 0.0, sharpened)
+
+                val mask = Mat()
+                Imgproc.adaptiveThreshold(
+                    sharpened, mask, 255.0,
+                    Imgproc.ADAPTIVE_THRESH_MEAN_C,
+                    Imgproc.THRESH_BINARY_INV,
+                    55, 25.0
+                )
+
+                val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(2.0, 2.0))
+                Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_CLOSE, kernel)
+
+                val result = Mat(src.size(), src.type(), Scalar(255.0, 255.0, 255.0))
+                src.copyTo(result, mask)
+                result.copyTo(dst)
+
+                listOf(contrast, gray, claheOut, denoised, sharpened, mask, result)
+                    .forEach { it.release() }
+            }
+
+            "bw" -> {
+                val gray = Mat()
+                Imgproc.cvtColor(src, gray, Imgproc.COLOR_RGBA2GRAY)
+                Imgproc.adaptiveThreshold(
+                    gray, dst, 255.0,
+                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    Imgproc.THRESH_BINARY,
+                    25, 10.0
+                )
+                gray.release()
+            }
+
+            "gray" -> {
+                Imgproc.cvtColor(src, dst, Imgproc.COLOR_RGBA2GRAY)
+            }
+
+            else -> src.copyTo(dst)
+        }
+        return dst
+    }
+
+    // ---- helpers ----
     private fun orderQuadClockwise(pts: Array<Point>): Array<Point> {
         val sumSorted = pts.sortedBy { it.x + it.y }
         val tl = sumSorted.first()
