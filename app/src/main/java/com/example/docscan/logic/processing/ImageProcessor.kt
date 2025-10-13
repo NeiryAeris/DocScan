@@ -114,11 +114,7 @@ object ImageProcessor {
 
                 // save if needed
                 if (outFile != null && warpedEnhanced != null) {
-                    val enhancedBitmap = Bitmap.createBitmap(
-                        warpedEnhanced.cols(),
-                        warpedEnhanced.rows(),
-                        Bitmap.Config.ARGB_8888
-                    )
+                    val enhancedBitmap = createBitmap(warpedEnhanced.cols(), warpedEnhanced.rows())
                     Utils.matToBitmap(warpedEnhanced, enhancedBitmap)
                     FileOutputStream(outFile).use { fos ->
                         enhancedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, fos)
