@@ -40,6 +40,10 @@ android {
 }
 
 dependencies {
+    // Core module
+    implementation(project(":pipeline-core")) {
+        exclude(group = "org.openpnp", module = "opencv")
+    }
     // Compose BOM
     implementation(platform(libs.androidx.compose.bom))
 
@@ -85,6 +89,4 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.material.icons.extended.android)
 
-    //Wiring module
-    implementation(project(":pipeline-core"))
 }

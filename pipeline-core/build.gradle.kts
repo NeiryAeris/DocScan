@@ -13,7 +13,11 @@ kotlin {
 
 dependencies {
     // Desktop OpenCV with org.opencv.* API + bundled natives
-    implementation(libs.openpnp.opencv)
+    compileOnly(libs.openpnp.opencv)
+
+    // For the desktop smoke test (JUnit)
+    testImplementation(libs.openpnp.opencv)
+    testRuntimeOnly(libs.openpnp.opencv)
+
     testImplementation(kotlin("test"))
-//    implementation("nu.pattern:opencv:2.4.9-7")  // add this line
 }

@@ -17,14 +17,21 @@ object DocumentPipeline {
 
     /** Load OpenCV natives for desktop JVM (openpnp artifact). */
     fun init() {
+        // If we're on Android, OpenCV is loaded via OpenCVLoader.initDebug() in App.kt
+        val isAndroid = try { Class.forName("android.os.Build"); true } catch (_: Throwable) { false }
+        if (isAndroid) return
+
+        // Desktop/JVM: load natives from OpenPnP
         try {
-            // This class is packaged inside org.openpnp:opencv 4.x
             val cls = Class.forName("nu.pattern.OpenCV")
             val m = cls.getMethod("loadLocally")
-            m.invoke(null)                              // extracts & loads the matching native lib
+            m.invoke(null)
         } catch (_: Throwable) {
-            // Fallback (in case the loader class isn’t present for some reason)
-            System.loadLibrary(org.opencv.core.Core.NATIVE_LIBRARY_NAME)
+            try {
+                System.loadLibrary(org.opencv.core.Core.NATIVE_LIBRARY_NAME)
+            } catch (_: Throwable) {
+                // ignore: tests will fail loudly if loading actually didn’t work
+            }
         }
     }
 
