@@ -19,7 +19,7 @@ dependencies {
     testImplementation(libs.openpnp.opencv)
     testRuntimeOnly(libs.openpnp.opencv)
 
-//    testImplementation(kotlin("test"))
+    testImplementation(kotlin("test"))
     testImplementation(libs.junit)
 }
 

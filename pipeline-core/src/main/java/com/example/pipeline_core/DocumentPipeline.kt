@@ -13,6 +13,28 @@ data class ProcessResult(
     val enhanced: Mat?           // enhanced output per mode
 )
 
+data class Params(
+    // ---- color mode knobs ----
+    val colorContrastAlpha: Double = 1.3,               // convertTo alpha
+    val claheClipLimit: Double = 3.0,                   // Imgproc.createCLAHE clip limit
+    val claheTileGrid: Size = Size(8.0, 8.0),           // CLAHE tile size
+    val bilateralDiameter: Int = 7,                     // bilateral filter d
+    val bilateralSigmaColor: Double = 50.0,
+    val bilateralSigmaSpace: Double = 50.0,
+    val sharpenAlpha: Double = 1.4,                     // addWeighted(denoised, alpha, claheOut, -beta)
+    val sharpenBeta: Double = 0.4,
+    val maskBlockFactor: Double = 55.0 / 1200.0,        // adaptiveThreshold block size scales with image minDim
+    val maskC: Double = 25.0,
+    val maskMorphKernel: Int = 2,                       // close kernel size (pixels)
+
+    // ---- bw mode knobs ----
+    val bwBlockFactor: Double = 25.0 / 1200.0,
+    val bwC: Double = 10.0
+)
+
+private fun oddAtLeast(n: Int, minOdd: Int = 3) = if (n % 2 == 1) maxOf(n, minOdd) else maxOf(n + 1, minOdd)
+private fun kernel(size: Int) = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(size.toDouble(), size.toDouble()))
+
 object DocumentPipeline {
 
     /** Load OpenCV natives for desktop JVM (openpnp artifact). */
@@ -39,7 +61,7 @@ object DocumentPipeline {
      *  Expect **RGBA** input (CV_8UC4) for desktop<->Android parity.
      *  @param mode "auto" (no extra enhance), "color", "bw", or "gray"
      */
-    fun process(srcRgba: Mat, mode: String = "auto"): ProcessResult {
+    fun process(srcRgba: Mat, mode: String = "auto", params: Params = Params()): ProcessResult {
         require(srcRgba.type() == CvType.CV_8UC4) { "Provide RGBA Mat (CV_8UC4)" }
 
         val src = srcRgba
@@ -137,33 +159,44 @@ object DocumentPipeline {
     }
 
     // ---- Enhancement filters (ported) ----
-    private fun enhanceDocument(src: Mat, mode: String): Mat {
+    private fun enhanceDocument(src: Mat, mode: String, params: Params = Params()): Mat {
         val dst = Mat()
+
         when (mode) {
             "color" -> {
                 val contrast = Mat()
-                src.convertTo(contrast, -1, 1.3, 0.0)
+                src.convertTo(contrast, -1, params.colorContrastAlpha, 0.0)
 
                 val gray = Mat()
                 Imgproc.cvtColor(contrast, gray, Imgproc.COLOR_RGBA2GRAY)
 
-                val clahe: CLAHE = Imgproc.createCLAHE(3.0, Size(8.0, 8.0))
+                val clahe: CLAHE = Imgproc.createCLAHE(params.claheClipLimit, params.claheTileGrid)
                 val claheOut = Mat()
                 clahe.apply(gray, claheOut)
 
                 val denoised = Mat()
-                Imgproc.bilateralFilter(claheOut, denoised, 7, 50.0, 50.0)
+                Imgproc.bilateralFilter(
+                    claheOut, denoised,
+                    params.bilateralDiameter,
+                    params.bilateralSigmaColor,
+                    params.bilateralSigmaSpace
+                )
 
                 val sharpened = Mat()
-                Core.addWeighted(denoised, 1.4, claheOut, -0.4, 0.0, sharpened)
+                Core.addWeighted(denoised, params.sharpenAlpha, claheOut, -params.sharpenBeta, 0.0, sharpened)
 
+                // Text mask via adaptive threshold (scale block size to image size)
+                val minDim = minOf(src.rows(), src.cols())
+                val maskBlock = oddAtLeast((params.maskBlockFactor * minDim).toInt(), 15) // keep odd & >= 15
                 val mask = Mat()
                 Imgproc.adaptiveThreshold(
                     sharpened, mask, 255.0,
-                    Imgproc.ADAPTIVE_THRESH_MEAN_C, Imgproc.THRESH_BINARY_INV,
-                    55, 25.0
+                    Imgproc.ADAPTIVE_THRESH_MEAN_C,
+                    Imgproc.THRESH_BINARY_INV,
+                    maskBlock, params.maskC
                 )
 
+                // Close small gaps in mask
                 val k = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(2.0, 2.0))
                 Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_CLOSE, k)
 
@@ -176,30 +209,27 @@ object DocumentPipeline {
             }
 
             "bw" -> {
+                // Strong black/white
                 val gray = Mat()
                 Imgproc.cvtColor(src, gray, Imgproc.COLOR_RGBA2GRAY)
+                val minDim = minOf(src.rows(), src.cols())
+                val block = oddAtLeast((params.bwBlockFactor * minDim).toInt(), 15)
                 Imgproc.adaptiveThreshold(
                     gray, dst, 255.0,
-                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY,
-                    25, 10.0
+                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    Imgproc.THRESH_BINARY,
+                    block, params.bwC
                 )
-                // keep RGBA out for parity
-                val rgba = Mat()
-                Imgproc.cvtColor(dst, rgba, Imgproc.COLOR_GRAY2RGBA)
-                rgba.copyTo(dst)
-                gray.release(); rgba.release()
+                gray.release()
             }
 
             "gray" -> {
                 Imgproc.cvtColor(src, dst, Imgproc.COLOR_RGBA2GRAY)
-                val rgba = Mat()
-                Imgproc.cvtColor(dst, rgba, Imgproc.COLOR_GRAY2RGBA)
-                rgba.copyTo(dst)
-                rgba.release()
             }
 
-            else -> src.copyTo(dst) // "auto" or unknown -> no extra enhance
+            else -> src.copyTo(dst) // "auto" falls back for now; we’ll improve auto later
         }
+
         return dst
     }
 
