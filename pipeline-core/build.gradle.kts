@@ -19,5 +19,16 @@ dependencies {
     testImplementation(libs.openpnp.opencv)
     testRuntimeOnly(libs.openpnp.opencv)
 
-    testImplementation(kotlin("test"))
+//    testImplementation(kotlin("test"))
+    testImplementation(libs.junit)
+}
+
+tasks.test {
+    useJUnit()   // << THIS is the important bit
+    testLogging {
+        events("passed", "failed", "skipped", "standardOut", "standardError")
+        showExceptions = true
+        showStackTraces = true
+        showCauses = true
+    }
 }
