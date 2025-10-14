@@ -1,42 +1,55 @@
-package com.example.docscan.logic.processing
+package com.example.pipeline
 
-import android.graphics.Bitmap
-import androidx.core.graphics.createBitmap
-import org.opencv.android.Utils
 import org.opencv.core.*
+import org.opencv.imgproc.CLAHE
 import org.opencv.imgproc.Imgproc
-import java.io.File
-import java.io.FileOutputStream
 import kotlin.math.hypot
 import kotlin.math.max
 
-object ImageProcessor {
+data class ProcessResult(
+    val overlay: Mat,            // original with green quad
+    val quad: Array<Point>?,     // detected quad points (orig scale)
+    val warped: Mat?,            // perspective-corrected doc (RGBA)
+    val enhanced: Mat?           // enhanced output per mode
+)
 
-    data class Result(
-        val bitmap: Bitmap,        // preview with contour
-        val quad: Array<Point>?,   // detected quad points
-        val warped: Mat?,          // raw warped document
-        val enhanced: Mat?,        // enhanced final image
-        val file: File?            // saved JPEG (enhanced)
-    )
+object DocumentPipeline {
 
-    fun processDocument(
-        orig: Bitmap,
-        outFile: File? = null,
-        mode: String = "auto"
-    ): Result {
-        // Ensure ARGB_8888
-        val srcBmp = if (orig.config != Bitmap.Config.ARGB_8888)
-            orig.copy(Bitmap.Config.ARGB_8888, false) else orig
+    /** Load OpenCV natives for desktop JVM (openpnp artifact). */
+    fun init() {
+        // If we're on Android, OpenCV is loaded via OpenCVLoader.initDebug() in App.kt
+        val isAndroid = try { Class.forName("android.os.Build"); true } catch (_: Throwable) { false }
+        if (isAndroid) return
 
-        val src = Mat(srcBmp.height, srcBmp.width, CvType.CV_8UC4)
-        Utils.bitmapToMat(srcBmp, src)
+        // Desktop/JVM: load natives from OpenPnP
+        try {
+            val cls = Class.forName("nu.pattern.OpenCV")
+            val m = cls.getMethod("loadLocally")
+            m.invoke(null)
+        } catch (_: Throwable) {
+            try {
+                System.loadLibrary(org.opencv.core.Core.NATIVE_LIBRARY_NAME)
+            } catch (_: Throwable) {
+                // ignore: tests will fail loudly if loading actually didn’t work
+            }
+        }
+    }
 
-        // --- Resize for detection speed ---
+    /** Port of your Android pipeline.
+     *  Expect **RGBA** input (CV_8UC4) for desktop<->Android parity.
+     *  @param mode "auto" (no extra enhance), "color", "bw", or "gray"
+     */
+    fun process(srcRgba: Mat, mode: String = "auto"): ProcessResult {
+        require(srcRgba.type() == CvType.CV_8UC4) { "Provide RGBA Mat (CV_8UC4)" }
+
+        val src = srcRgba
+
+        // --- Resize for detection speed (same as your script) ---
         val maxSide = 1000.0
         val h = src.rows()
         val w = src.cols()
         val scaleFactor = if (max(w, h) > maxSide) maxSide / max(w, h) else 1.0
+
         val small = Mat()
         if (scaleFactor != 1.0)
             Imgproc.resize(src, small, Size(w * scaleFactor, h * scaleFactor))
@@ -53,38 +66,34 @@ object ImageProcessor {
         var quad: Array<Point>? = null
         var warped: Mat? = null
         var warpedEnhanced: Mat? = null
-        val outBmp: Bitmap
 
         try {
             // Preprocess
             Imgproc.cvtColor(small, gray, Imgproc.COLOR_RGBA2GRAY)
             Imgproc.GaussianBlur(gray, blurred, Size(5.0, 5.0), 0.0)
 
-            // Otsu threshold
-            Imgproc.threshold(
-                blurred, binary, 0.0, 255.0,
-                Imgproc.THRESH_BINARY + Imgproc.THRESH_OTSU
-            )
+            // Otsu
+            Imgproc.threshold(blurred, binary, 0.0, 255.0, Imgproc.THRESH_BINARY or Imgproc.THRESH_OTSU)
 
-            // Canny edges
+            // Canny
             Imgproc.Canny(binary, edges, 50.0, 150.0)
 
-            // Morphological close to fill gaps
+            // Morph close
             val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(7.0, 7.0))
             Imgproc.morphologyEx(edges, closed, Imgproc.MORPH_CLOSE, kernel)
 
-            // Find contours
+            // Contours
             val hierarchy = Mat()
             Imgproc.findContours(closed, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE)
             contours.sortByDescending { Imgproc.contourArea(it) }
 
             val imgArea = (small.rows() * small.cols()).toDouble()
-            val maxArea = imgArea * 0.9
+            val maxAreaAllowed = imgArea * 0.9
 
             // Try top contours
             for (c in contours.take(15)) {
                 val area = Imgproc.contourArea(c)
-                if (area > maxArea) continue
+                if (area > maxAreaAllowed) continue
 
                 val c2f = MatOfPoint2f(*c.toArray())
                 val peri = Imgproc.arcLength(c2f, true)
@@ -99,7 +108,7 @@ object ImageProcessor {
                 }
             }
 
-            // Fallback to rectangle if no quad
+            // Fallback to min-area rectangle
             if (quad == null && contours.isNotEmpty()) {
                 val rect = Imgproc.minAreaRect(MatOfPoint2f(*contours[0].toArray()))
                 val boxPts = arrayOf(Point(), Point(), Point(), Point())
@@ -108,81 +117,62 @@ object ImageProcessor {
                 warped = fourPointWarp(src, quad!!)
             }
 
-            // === Enhancement ===
+            // Enhancement
             if (warped != null) {
-                warpedEnhanced = enhanceDocument(warped, mode)
-
-                // save if needed
-                if (outFile != null && warpedEnhanced != null) {
-                    val enhancedBitmap = createBitmap(warpedEnhanced.cols(), warpedEnhanced.rows())
-                    Utils.matToBitmap(warpedEnhanced, enhancedBitmap)
-                    FileOutputStream(outFile).use { fos ->
-                        enhancedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, fos)
-                    }
-                }
+                warpedEnhanced = enhanceDocument(warped!!, mode)
             }
 
-            // === Preview contour overlay ===
-            val previewMat = src.clone()
+            // Overlay
+            val overlay = src.clone()
             quad?.let {
-                Imgproc.polylines(previewMat, listOf(MatOfPoint(*it)), true, Scalar(0.0, 255.0, 0.0), 6)
+                Imgproc.polylines(overlay, listOf(MatOfPoint(*it)), true, Scalar(0.0, 255.0, 0.0, 255.0), 6)
             }
-            outBmp = createBitmap(previewMat.cols(), previewMat.rows())
-            Utils.matToBitmap(previewMat, outBmp)
-            previewMat.release()
 
-            return Result(outBmp, quad, warped, warpedEnhanced, outFile)
-
+            return ProcessResult(overlay, quad, warped, warpedEnhanced)
         } finally {
-            src.release()
-            small.release()
-            gray.release()
-            blurred.release()
-            binary.release()
-            edges.release()
-            closed.release()
-            contours.forEach { it.release() }
+            // release temps
+            small.release(); gray.release(); blurred.release(); binary.release()
+            edges.release(); closed.release(); contours.forEach { it.release() }
         }
     }
 
-    // ---- Enhancement filters ----
+    // ---- Enhancement filters (ported) ----
     private fun enhanceDocument(src: Mat, mode: String): Mat {
         val dst = Mat()
         when (mode) {
             "color" -> {
-                // Smart “Magic Color” enhancement
                 val contrast = Mat()
                 src.convertTo(contrast, -1, 1.3, 0.0)
 
                 val gray = Mat()
                 Imgproc.cvtColor(contrast, gray, Imgproc.COLOR_RGBA2GRAY)
 
-                val clahe = Imgproc.createCLAHE(3.0, Size(8.0, 8.0))
+                val clahe: CLAHE = Imgproc.createCLAHE(3.0, Size(8.0, 8.0))
                 val claheOut = Mat()
                 clahe.apply(gray, claheOut)
 
                 val denoised = Mat()
                 Imgproc.bilateralFilter(claheOut, denoised, 7, 50.0, 50.0)
+
                 val sharpened = Mat()
                 Core.addWeighted(denoised, 1.4, claheOut, -0.4, 0.0, sharpened)
 
                 val mask = Mat()
                 Imgproc.adaptiveThreshold(
                     sharpened, mask, 255.0,
-                    Imgproc.ADAPTIVE_THRESH_MEAN_C,
-                    Imgproc.THRESH_BINARY_INV,
+                    Imgproc.ADAPTIVE_THRESH_MEAN_C, Imgproc.THRESH_BINARY_INV,
                     55, 25.0
                 )
 
-                val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(2.0, 2.0))
-                Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_CLOSE, kernel)
+                val k = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(2.0, 2.0))
+                Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_CLOSE, k)
 
-                val result = Mat(src.size(), src.type(), Scalar(255.0, 255.0, 255.0))
+                // Copy to white background with alpha=255 for RGBA
+                val result = Mat(src.size(), src.type(), Scalar(255.0, 255.0, 255.0, 255.0))
                 src.copyTo(result, mask)
                 result.copyTo(dst)
 
-                listOf(contrast, gray, claheOut, denoised, sharpened, mask, result)
-                    .forEach { it.release() }
+                listOf(contrast, gray, claheOut, denoised, sharpened, mask, result).forEach { it.release() }
             }
 
             "bw" -> {
@@ -190,18 +180,25 @@ object ImageProcessor {
                 Imgproc.cvtColor(src, gray, Imgproc.COLOR_RGBA2GRAY)
                 Imgproc.adaptiveThreshold(
                     gray, dst, 255.0,
-                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
-                    Imgproc.THRESH_BINARY,
+                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY,
                     25, 10.0
                 )
-                gray.release()
+                // keep RGBA out for parity
+                val rgba = Mat()
+                Imgproc.cvtColor(dst, rgba, Imgproc.COLOR_GRAY2RGBA)
+                rgba.copyTo(dst)
+                gray.release(); rgba.release()
             }
 
             "gray" -> {
                 Imgproc.cvtColor(src, dst, Imgproc.COLOR_RGBA2GRAY)
+                val rgba = Mat()
+                Imgproc.cvtColor(dst, rgba, Imgproc.COLOR_GRAY2RGBA)
+                rgba.copyTo(dst)
+                rgba.release()
             }
 
-            else -> src.copyTo(dst)
+            else -> src.copyTo(dst) // "auto" or unknown -> no extra enhance
         }
         return dst
     }
@@ -226,9 +223,14 @@ object ImageProcessor {
         val heightA = hypot(tr.x - br.x, tr.y - br.y)
         val heightB = hypot(tl.x - bl.x, tl.y - bl.y)
 
-        val (targetW, targetH) = when (mode) {
-            "a4" -> 1240 to 1754
-            else -> ((widthA + widthB) / 2.0).toInt() to ((heightA + heightB) / 2.0).toInt()
+        val targetW: Int
+        val targetH: Int
+        when (mode) {
+            "a4" -> { targetW = 1240; targetH = 1754 }  // ~A4 @ ~150dpi
+            else -> {
+                targetW = ((widthA + widthB) / 2.0).toInt().coerceAtLeast(1)
+                targetH = ((heightA + heightB) / 2.0).toInt().coerceAtLeast(1)
+            }
         }
 
         val srcPts = MatOfPoint2f(tl, tr, br, bl)

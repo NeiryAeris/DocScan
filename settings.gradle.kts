@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "DocScan"
 include(":app")
+include(":pipeline-core")

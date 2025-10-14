@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import coil.compose.rememberAsyncImagePainter
 import java.io.File
 import kotlinx.coroutines.launch
+import com.example.docscan.logic.utils.runPipelineAsync
 
 // Định nghĩa các mục cho Bottom Navigation
 sealed class BottomNavItem(val title: String, val icon: ImageVector, val route: String) {
@@ -240,48 +241,85 @@ fun CameraScreen() {
 @Composable
 fun ImportImageScreen() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
-    var enhancedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var overlayBitmap by remember { mutableStateOf<Bitmap?>(null) }   // preview with quad
+    var enhancedBitmap by remember { mutableStateOf<Bitmap?>(null) }  // final result
     var isFullScreen by remember { mutableStateOf(false) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+    var isBusy by remember { mutableStateOf(false) }
+
+    // New: use the shared pipeline via our bridge
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
         selectedImageUri = uri
-        uri?.let {
-            val bitmap = com.example.docscan.logic.utils.FileOps.loadImageFromUri(context, it)
-            val result = com.example.docscan.logic.processing.ImageProcessor.processDocument(bitmap)
-            result.enhanced?.let { mat ->
-                val outBitmap = Bitmap.createBitmap(mat.cols(), mat.rows(), Bitmap.Config.ARGB_8888)
-                org.opencv.android.Utils.matToBitmap(mat, outBitmap)
-                enhancedBitmap = outBitmap
+        if (uri == null) return@rememberLauncherForActivityResult
+
+        isBusy = true
+        scope.launch {
+            try {
+                // Your existing loader (returns a Bitmap)
+                val srcBitmap = com.example.docscan.logic.utils.FileOps.loadImageFromUri(context, uri)
+
+                // NEW: run shared pipeline (pick the mode you want: "color", "gray", "bw", or "auto")
+                val res = runPipelineAsync(srcBitmap, mode = "color")
+
+                overlayBitmap = res.overlay
+                enhancedBitmap = res.enhanced
+            } catch (t: Throwable) {
+                // Optional: show a snackbar or log
+                // e.g., DebugLog.e("Import failed", tr = t)
+                overlayBitmap = null
+                enhancedBitmap = null
+            } finally {
+                isBusy = false
             }
         }
     }
 
     if (isFullScreen && enhancedBitmap != null) {
         Box(modifier = Modifier.fillMaxSize()) {
-            Image(bitmap = enhancedBitmap!!.asImageBitmap(), contentDescription = "Enhanced Image Fullscreen", modifier = Modifier.fillMaxSize())
+            Image(
+                bitmap = enhancedBitmap!!.asImageBitmap(),
+                contentDescription = "Enhanced Image Fullscreen",
+                modifier = Modifier.fillMaxSize()
+            )
             Button(
                 onClick = { isFullScreen = false },
                 modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
-            ) {
-                Text("Back")
-            }
+            ) { Text("Back") }
         }
     } else {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = "Import Image", style = MaterialTheme.typography.titleLarge)
+            Text("Import Image", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = { launcher.launch("image/*") }) {
-                Text("Select Image from Device")
+
+            Button(onClick = { if (!isBusy) launcher.launch("image/*") }, enabled = !isBusy) {
+                Text(if (isBusy) "Processing…" else "Select Image from Device")
             }
+
             selectedImageUri?.let { uri ->
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(text = "Selected: ${uri.path}")
-                Image(painter = rememberAsyncImagePainter(uri), contentDescription = null, modifier = Modifier.size(200.dp))
+                Image(
+                    painter = rememberAsyncImagePainter(uri),
+                    contentDescription = null,
+                    modifier = Modifier.size(200.dp)
+                )
             }
-            enhancedBitmap?.let { bitmap ->
+
+            // Optional: show overlay (quad preview)
+            overlayBitmap?.let { bmp ->
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(text = "Enhanced Output:")
-                Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Enhanced Image", modifier = Modifier.size(200.dp))
+                Text("Overlay:")
+                Image(bitmap = bmp.asImageBitmap(), contentDescription = "Overlay", modifier = Modifier.size(200.dp))
+            }
+
+            enhancedBitmap?.let { bmp ->
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Enhanced Output:")
+                Image(bitmap = bmp.asImageBitmap(), contentDescription = "Enhanced Image", modifier = Modifier.size(200.dp))
                 Button(onClick = { isFullScreen = true }, modifier = Modifier.padding(top = 8.dp)) {
                     Text("View Fullscreen")
                 }
@@ -289,3 +327,4 @@ fun ImportImageScreen() {
         }
     }
 }
+

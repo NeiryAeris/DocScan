@@ -18,6 +18,7 @@ materialIconsExtendedAndroidVersion = "1.6.7"
 opencv = "4.12.0"
 composeBomVersion = "2025.09.00"
 material3 = "1.5.0-alpha04"
+opencvVersion = "4.9.0-0"
 ui = "1.10.0-alpha03"
 foundation = "1.10.0-alpha03"
 uiToolingPreview = "1.10.0-alpha03"
@@ -26,6 +27,7 @@ navigationCompose = "2.9.5"
 materialIconsExtendedAndroid = "1.7.8"
 material = "1.10.0-alpha05"
 materialVersion = "1.14.0-alpha05"
+jetbrainsKotlinJvm = "2.0.21"
 
 [libraries]
 androidx-activity-compose-v193 = { module = "androidx.activity:activity-compose", version.ref = "activityComposeVersion" }
@@ -57,6 +59,7 @@ androidx-material3 = { group = "androidx.compose.material3", name = "material3" 
 opencv = { module = "org.opencv:opencv", version.ref = "opencv" }
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBomVersion" }
 material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
+openpnp-opencv = { module = "org.openpnp:opencv", version.ref = "opencvVersion" }
 ui = { group = "androidx.compose.ui", name = "ui", version.ref = "ui" }
 androidx-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
 ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
@@ -72,4 +75,5 @@ material = { group = "com.google.android.material", name = "material", version.r
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "jetbrainsKotlinJvm" }
 
