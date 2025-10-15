@@ -1,10 +1,12 @@
 package com.example.pipeline
 
 import org.opencv.core.*
+import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.CLAHE
 import org.opencv.imgproc.Imgproc
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.pow
 
 data class ProcessResult(
     val overlay: Mat,            // original with green quad
@@ -29,7 +31,12 @@ data class Params(
 
     // ---- bw mode knobs ----
     val bwBlockFactor: Double = 25.0 / 1200.0,
-    val bwC: Double = 10.0
+    val bwC: Double = 10.0,
+
+    // ---- sketch mode knobs ----
+    val sketchCannyLo: Double = 60.0,
+    val sketchCannyHi: Double = 180.0,
+    val sketchDilate: Int = 1
 )
 
 private fun oddAtLeast(n: Int, minOdd: Int = 3) = if (n % 2 == 1) maxOf(n, minOdd) else maxOf(n + 1, minOdd)
@@ -223,9 +230,84 @@ object DocumentPipeline {
                 gray.release()
             }
 
-            "gray" -> {
-                Imgproc.cvtColor(src, dst, Imgproc.COLOR_RGBA2GRAY)
+            "sketch" -> {
+                // Bước 1️⃣: Grayscale
+                val gray = Mat()
+                Imgproc.cvtColor(src, gray, Imgproc.COLOR_RGBA2GRAY)
+                Imgcodecs.imwrite("build/test-output/step1_gray.jpg", gray)
+
+                // Bước 2️⃣: Preserve vùng cực trị (clip shadow / highlight)
+                val clipped = Mat()
+                Core.min(gray, Scalar(245.0), clipped)
+                Core.max(clipped, Scalar(10.0), clipped)
+                Imgcodecs.imwrite("build/test-output/step2_clipped.jpg", clipped)
+
+                // Bước 3️⃣: Background normalization (khử bóng)
+                val bg = Mat()
+                Imgproc.medianBlur(clipped, bg, 51)
+                val norm = Mat()
+                Core.divide(clipped, bg, norm, 255.0)
+                Imgcodecs.imwrite("build/test-output/step3_normalized.jpg", norm)
+
+                // Bước 4️⃣: Căng dải sáng
+                val stretched = Mat()
+                Core.normalize(norm, stretched, 0.0, 255.0, Core.NORM_MINMAX)
+                Imgcodecs.imwrite("build/test-output/step4_stretched.jpg", stretched)
+
+                // ===============================
+                // (A) NHÁNH MASK – BINARIZE SỚM
+                // ===============================
+                val mask = Mat()
+                Imgproc.adaptiveThreshold(
+                    stretched, mask, 255.0,
+                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    Imgproc.THRESH_BINARY_INV, 25, 10.0
+                )
+                val mk = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(2.0, 2.0))
+                Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_CLOSE, mk)
+                Imgcodecs.imwrite("build/test-output/step5_mask_early.jpg", mask)
+
+                // ===============================
+                // (B) NHÁNH TONE – ENHANCE RIÊNG
+                // ===============================
+                val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
+                val claheOut = Mat()
+                clahe.apply(stretched, claheOut)
+                Imgcodecs.imwrite("build/test-output/step6_clahe.jpg", claheOut)
+
+                val blurred = Mat()
+                Imgproc.GaussianBlur(claheOut, blurred, Size(5.0, 5.0), 0.0)
+
+                val sharpened = Mat()
+                Core.addWeighted(claheOut, 1.6, blurred, -0.6, 0.0, sharpened)
+                Imgcodecs.imwrite("build/test-output/step7_sharpened.jpg", sharpened)
+
+                // Gamma correction (LUT)
+                val gammaCorrected = Mat()
+                val lutArray = ByteArray(256) { i ->
+                    ((i / 255.0).pow(0.85) * 255.0).toInt().coerceIn(0, 255).toByte()
+                }
+                val gammaLut = Mat(1, 256, CvType.CV_8U)
+                gammaLut.put(0, 0, lutArray)
+                Core.LUT(sharpened, gammaLut, gammaCorrected)
+                Imgcodecs.imwrite("build/test-output/step8_gamma.jpg", gammaCorrected)
+                gammaLut.release()
+
+                // ===============================
+                // (C) COMPOSE – ÁP MASK SỚM LÊN NHÁNH TONE
+                // ===============================
+                val final = Mat(gammaCorrected.size(), gammaCorrected.type(), Scalar(255.0))
+                gammaCorrected.copyTo(final, mask)
+                Imgcodecs.imwrite("build/test-output/step9_hybrid_result.jpg", final)
+
+                final.copyTo(dst)
+
+                listOf(
+                    gray, clipped, bg, norm, stretched,
+                    mask, claheOut, blurred, sharpened, gammaCorrected, final
+                ).forEach { it.release() }
             }
+
 
             else -> src.copyTo(dst) // "auto" falls back for now; we’ll improve auto later
         }
