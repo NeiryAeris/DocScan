@@ -77,7 +77,7 @@ class Smoke {
         val r = DocumentPipeline.process(rgba, "sketch")
 //        Imgcodecs.imwrite("${outDir.path}/sketch_overlay.png", r.overlay)
 //        r.warped?.let { Imgcodecs.imwrite("${outDir.path}/sketch_warped.png", it) }
-//        r.enhanced?.let { Imgcodecs.imwrite("${outDir.path}/sketch_enhanced.png", it) }
+        r.enhanced?.let { Imgcodecs.imwrite("${outDir.path}/sketch_enhanced.png", it) }
 
 //        val r2 = DocumentPipeline.process(rgba, "bw")
 //        r2.enhanced?.let { Imgcodecs.imwrite("${outDir.path}/bw_enhanced.png", it) }
