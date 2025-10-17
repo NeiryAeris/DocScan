@@ -21,14 +21,12 @@ class PageStore private constructor(
             if (ref is PageRef.InMemory) ref.mat.release()
         }
 
-        fun disCache(dir: File): PageStore {
+        fun diskCache(dir: File): PageStore {
             dir.mkdirs()
             return PageStore(mutableListOf()) { ref ->
                 if (ref is PageRef.OnDisk) ref.file.delete()
             }
         }
-
-
     }
 
     private val counter = AtomicInteger(0)
