@@ -1,7 +1,7 @@
 package com.example.docscan.logic.utils
 
 import android.graphics.Bitmap
-import com.example.pipeline.DocumentPipeline
+import com.example.pipeline_core.DocumentPipeline
 import org.opencv.core.Point
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

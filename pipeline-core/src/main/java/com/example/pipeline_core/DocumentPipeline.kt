@@ -1,7 +1,6 @@
-package com.example.pipeline
+package com.example.pipeline_core
 
 import org.opencv.core.*
-import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.CLAHE
 import org.opencv.imgproc.Imgproc
 import kotlin.math.hypot
@@ -57,7 +56,7 @@ object DocumentPipeline {
             m.invoke(null)
         } catch (_: Throwable) {
             try {
-                System.loadLibrary(org.opencv.core.Core.NATIVE_LIBRARY_NAME)
+                System.loadLibrary(Core.NATIVE_LIBRARY_NAME)
             } catch (_: Throwable) {
                 // ignore: tests will fail loudly if loading actually didn’t work
             }

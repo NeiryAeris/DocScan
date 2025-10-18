@@ -50,7 +50,7 @@
 //    }
 //}
 
-import com.example.pipeline.DocumentPipeline
+import com.example.pipeline_core.DocumentPipeline
 
 import org.opencv.core.Mat
 import org.opencv.imgcodecs.Imgcodecs
