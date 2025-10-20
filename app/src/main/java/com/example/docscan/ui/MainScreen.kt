@@ -1,329 +1,295 @@
-// In ui/MainScreen.kt
 package com.example.docscan.ui
 
 import android.Manifest
-import android.annotation.SuppressLint
-import android.content.pm.PackageManager
-import android.net.Uri
 import android.graphics.Bitmap
+import android.os.Build
+import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
-import com.example.docscan.ui.screens.FilesScreen
-import com.example.docscan.ui.screens.HomeScreen
-import com.example.docscan.ui.screens.ProfileScreen
-import com.example.docscan.ui.screens.ToolsScreen
-import com.example.docscan.logic.camera.CameraController
-import androidx.camera.view.PreviewView
-import androidx.compose.foundation.layout.height
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
-import coil.compose.rememberAsyncImagePainter
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import com.example.docscan.logic.utils.FileOps
+import com.example.docscan.logic.utils.AndroidPdfExporter
+import com.example.docscan.logic.utils.runPipelineAsync
 import com.example.docscan.logic.utils.ScanSession
 import java.io.File
-import kotlinx.coroutines.launch
-import com.example.docscan.logic.utils.runPipelineAsync
-
-// Định nghĩa các mục cho Bottom Navigation
-sealed class BottomNavItem(val title: String, val icon: ImageVector, val route: String) {
-    object Home : BottomNavItem("Trang chủ", Icons.Default.Home, "home")
-    object Files : BottomNavItem("Tệp tin", Icons.Default.Folder, "files")
-    object Tools : BottomNavItem("Công cụ", Icons.Default.Build, "tools")
-    object Profile : BottomNavItem("Tôi", Icons.Default.Person, "profile")
-}
-
 
 @OptIn(ExperimentalMaterial3Api::class)
-@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun MainScreen() {
-    val navController = rememberNavController()
-
-    Scaffold(
-        // Quay lại sử dụng NavigationBar đơn giản để kiểm tra
-        bottomBar = {
-            NavigationBar {
-                val items = listOf(
-                    BottomNavItem.Home,
-                    BottomNavItem.Files,
-                    BottomNavItem.Tools,
-                    BottomNavItem.Profile
-                )
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentRoute = navBackStackEntry?.destination?.route
-
-                items.forEach { item ->
-                    NavigationBarItem(
-                        icon = { Icon(item.icon, contentDescription = item.title) },
-                        label = { Text(item.title) },
-                        selected = currentRoute == item.route,
-                        onClick = {
-                            navController.navigate(item.route) {
-                                navController.graph.startDestinationRoute?.let { route ->
-                                    popUpTo(route) { saveState = true }
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
-                    )
-                }
-            }
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { navController.navigate("scan") },
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.PhotoCamera, contentDescription = "Camera")
-            }
-        }
-    ) { innerPadding ->
-        // NavHost chịu trách nhiệm hiển thị các màn hình
-        NavHost(
-            navController = navController,
-            startDestination = BottomNavItem.Home.route,
-            modifier = Modifier.padding(innerPadding) // Áp dụng padding để nội dung không bị che
-        ) {
-            composable(BottomNavItem.Home.route) { HomeScreen(navController) }
-            composable(BottomNavItem.Files.route) { FilesScreen(navController) }
-            composable(BottomNavItem.Tools.route) { ToolsScreen(navController) }
-            composable(BottomNavItem.Profile.route) { ProfileScreen(navController) }
-
-            // Simple destinations for actions
-            composable("scan") { CameraScreen() }
-            composable("import_image") { ImportImageScreen() }
-            composable("pdf_tools") { SimplePlaceholderScreen(title = "PDF Tools") }
-            composable("text_extraction") { SimplePlaceholderScreen(title = "Text Extraction") }
-        }
-    }
-}
-
-@Composable
-fun SimplePlaceholderScreen(title: String) {
-    // Minimal placeholder screen; real implementations should be provided separately
-    Box(modifier = Modifier.padding(16.dp)) {
-        Text(text = title)
-    }
-}
-
-@Composable
-fun CameraScreen() {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val cameraController = remember { CameraController(context) }
-    val coroutineScope = rememberCoroutineScope()
-
-    // Permission state
-    var hasPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted: Boolean ->
-        hasPermission = granted
-    }
-
-    if (!hasPermission) {
-        // Show a simple UI prompting for permission
-        Column(modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)) {
-            Text(text = "Camera permission is required to scan documents.")
-            Spacer(modifier = Modifier.size(12.dp))
-            Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
-                Text(text = "Grant Camera Permission")
-            }
-        }
-        // Ensure camera is unbound if permission lost
-        DisposableEffect(Unit) {
-            onDispose { cameraController.unbindAll() }
-        }
-        return
-    }
-
-    var previewView by remember { mutableStateOf<PreviewView?>(null) }
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        AndroidView(factory = { ctx ->
-            PreviewView(ctx).also { view ->
-                previewView = view
-            }
-        }, update = { view ->
-            // No-op
-        }, modifier = Modifier.fillMaxSize())
+    var isProcessing by remember { mutableStateOf(false) }
+    var overlayPreview by remember { mutableStateOf<Bitmap?>(null) }
+    var enhancedPreview by remember { mutableStateOf<Bitmap?>(null) }
 
-        // Snackbar host
-        SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.TopCenter))
-
-        // Capture button overlay
-        Column(modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .padding(bottom = 36.dp)) {
-            Button(
-                onClick = {
-                    val file = File(context.cacheDir, "scan_${System.currentTimeMillis()}.jpg")
-                    cameraController.takePhoto(
-                        file,
-                        onSaved = { saved ->
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("Saved: ${'$'}{saved.name}")
-                            }
-                        },
-                        onError = { err ->
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("Capture failed: ${'$'}{err.message}")
-                            }
-                        }
-                    )
-                },
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.CameraAlt, contentDescription = "Capture")
-            }
-        }
-    }
-
-    LaunchedEffect(previewView, hasPermission) {
-        if (!hasPermission) return@LaunchedEffect
-        previewView?.let { view ->
-            try {
-                cameraController.start(lifecycleOwner, view)
-            } catch (t: Throwable) {
-                coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Camera start failed: ${'$'}{t.message}")
+    val pickImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    isProcessing = true
+                    val bmp = FileOps.loadImageFromUri(ctx, uri)
+                    val res = runPipelineAsync(bmp, mode = "color")
+                    overlayPreview = res.overlay
+                    enhancedPreview = res.enhanced
+                    ScanSession.add(res.page)
+                    snackbarHostState.showSnackbar("Added page #${ScanSession.count}")
+                } catch (t: Throwable) {
+                    snackbarHostState.showSnackbar("Import failed: ${t.message}")
+                } finally {
+                    isProcessing = false
                 }
             }
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            cameraController.unbindAll()
+    val takePicturePreviewLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bmp ->
+        if (bmp != null) {
+            scope.launch {
+                try {
+                    isProcessing = true
+                    val res = runPipelineAsync(bmp, mode = "color")
+                    overlayPreview = res.overlay
+                    enhancedPreview = res.enhanced
+                    ScanSession.add(res.page)
+                    snackbarHostState.showSnackbar("Captured page #${ScanSession.count}")
+                } catch (t: Throwable) {
+                    snackbarHostState.showSnackbar("Capture failed: ${t.message}")
+                } finally {
+                    isProcessing = false
+                }
+            }
+        }
+    }
+
+    val requestCameraPermission = rememberCameraPermissionLauncher(
+        onGranted = { takePicturePreviewLauncher.launch(null) },
+        onDenied = {
+            scope.launch { snackbarHostState.showSnackbar("Camera permission denied") }
+        }
+    )
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "DocScan",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                actions = {
+                    Text(
+                        "Pages: ${ScanSession.count}",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(end = 16.dp)
+                    )
+                }
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            BottomActionBar(
+                isProcessing = isProcessing,
+                onImport = { pickImageLauncher.launch("image/*") },
+                onCapture = {
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        // On Android 13+, TakePicturePreview doesn't need explicit permission,
+                        // but we keep a unified flow for clarity.
+                        takePicturePreviewLauncher.launch(null)
+                    } else {
+                        requestCameraPermission.launch(Manifest.permission.CAMERA)
+                    }
+                },
+                onExport = {
+                    scope.launch {
+                        if (ScanSession.isEmpty) {
+                            snackbarHostState.showSnackbar("No pages to export")
+                        } else {
+                            try {
+                                val out = File(ctx.cacheDir, "scan_${System.currentTimeMillis()}.pdf")
+                                AndroidPdfExporter(ctx).export(ScanSession.snapshot(), out)
+                                snackbarHostState.showSnackbar("Exported PDF: ${out.absolutePath}")
+                                // optionally clear after export:
+                                // ScanSession.clear()
+                            } catch (t: Throwable) {
+                                snackbarHostState.showSnackbar("Export failed: ${t.message}")
+                            }
+                        }
+                    }
+                },
+                onClear = {
+                    ScanSession.clear()
+                    overlayPreview = null
+                    enhancedPreview = null
+                    scope.launch { snackbarHostState.showSnackbar("Cleared all pages") }
+                }
+            )
+        }
+    ) { inner ->
+        PreviewPane(
+            overlay = overlayPreview,
+            enhanced = enhancedPreview,
+            isProcessing = isProcessing,
+            modifier = Modifier
+                .padding(inner)
+                .fillMaxSize()
+        )
+    }
+}
+
+@Composable
+private fun BottomActionBar(
+    isProcessing: Boolean,
+    onImport: () -> Unit,
+    onCapture: () -> Unit,
+    onExport: () -> Unit,
+    onClear: () -> Unit
+) {
+    Surface(tonalElevation = 4.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                enabled = !isProcessing,
+                onClick = onImport
+            ) { Text("Import") }
+
+            OutlinedButton(
+                enabled = !isProcessing,
+                onClick = onCapture
+            ) { Text("Capture") }
+
+            Spacer(Modifier.weight(1f))
+
+            OutlinedButton(
+                enabled = !isProcessing && ScanSession.count > 0,
+                onClick = onClear
+            ) { Text("Clear") }
+
+            Button(
+                enabled = !isProcessing && ScanSession.count > 0,
+                onClick = onExport
+            ) { Text("Export (${ScanSession.count})") }
         }
     }
 }
 
 @Composable
-fun ImportImageScreen() {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
-    var overlayBitmap by remember { mutableStateOf<Bitmap?>(null) }   // preview with quad
-    var enhancedBitmap by remember { mutableStateOf<Bitmap?>(null) }  // final result
-    var isFullScreen by remember { mutableStateOf(false) }
-    var isBusy by remember { mutableStateOf(false) }
-
-    // New: use the shared pipeline via our bridge
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        selectedImageUri = uri
-        if (uri == null) return@rememberLauncherForActivityResult
-
-        isBusy = true
-        scope.launch {
-            try {
-                val bmp = FileOps.loadImageFromUri(context, uri)
-                val res = runPipelineAsync(bmp, mode = "color")
-                overlayBitmap = res.overlay
-                enhancedBitmap = res.enhanced
-                ScanSession.add(res.page)
-            } catch (t: Throwable) {
-                // Optional: show a snackbar or log
-                // e.g., DebugLog.e("Import failed", tr = t)
-                overlayBitmap = null
-                enhancedBitmap = null
-            } finally {
-                isBusy = false
-            }
+private fun PreviewPane(
+    overlay: Bitmap?,
+    enhanced: Bitmap?,
+    isProcessing: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        if (isProcessing) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
-    }
 
-    if (isFullScreen && enhancedBitmap != null) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Image(
-                bitmap = enhancedBitmap!!.asImageBitmap(),
-                contentDescription = "Enhanced Image Fullscreen",
-                modifier = Modifier.fillMaxSize()
-            )
-            Button(
-                onClick = { isFullScreen = false },
-                modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
-            ) { Text("Back") }
-        }
-    } else {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Import Image", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(16.dp))
+        Text("Preview", style = MaterialTheme.typography.titleMedium)
 
-            Button(onClick = { if (!isBusy) launcher.launch("image/*") }, enabled = !isBusy) {
-                Text(if (isBusy) "Processing…" else "Select Image from Device")
-            }
-
-            selectedImageUri?.let { uri ->
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(text = "Selected: ${uri.path}")
-                Image(
-                    painter = rememberAsyncImagePainter(uri),
-                    contentDescription = null,
-                    modifier = Modifier.size(200.dp)
-                )
-            }
-
-            // Optional: show overlay (quad preview)
-            overlayBitmap?.let { bmp ->
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Overlay:")
-                Image(bitmap = bmp.asImageBitmap(), contentDescription = "Overlay", modifier = Modifier.size(200.dp))
-            }
-
-            enhancedBitmap?.let { bmp ->
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Enhanced Output:")
-                Image(bitmap = bmp.asImageBitmap(), contentDescription = "Enhanced Image", modifier = Modifier.size(200.dp))
-                Button(onClick = { isFullScreen = true }, modifier = Modifier.padding(top = 8.dp)) {
-                    Text("View Fullscreen")
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 180.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (overlay != null) {
+                    Image(
+                        bitmap = overlay.asImageBitmap(),
+                        contentDescription = "Overlay",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Text("Overlay will appear here", style = MaterialTheme.typography.bodyMedium)
                 }
             }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 180.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (enhanced != null) {
+                    Image(
+                        bitmap = enhanced.asImageBitmap(),
+                        contentDescription = "Enhanced",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Text("Enhanced will appear here", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+
+        if (!isProcessing) {
+            AssistChipsRow()
         }
     }
 }
 
+@Composable
+private fun AssistChipsRow() {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AssistChip(
+            onClick = {},
+            label = { Text("Mode: color") },
+            enabled = false
+        )
+        AssistChip(
+            onClick = {},
+            label = { Text("Pages: ${ScanSession.count}") },
+            enabled = false
+        )
+    }
+}
+
+/** Camera permission launcher helper */
+@Composable
+private fun rememberCameraPermissionLauncher(
+    onGranted: () -> Unit,
+    onDenied: () -> Unit
+): ManagedActivityResultLauncher<String, Boolean> {
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) onGranted() else onDenied()
+    }
+    return launcher
+}
