@@ -50,6 +50,8 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.ui.graphics.asImageBitmap
 import coil.compose.rememberAsyncImagePainter
+import com.example.docscan.logic.utils.FileOps
+import com.example.docscan.logic.utils.ScanSession
 import java.io.File
 import kotlinx.coroutines.launch
 import com.example.docscan.logic.utils.runPipelineAsync
@@ -259,14 +261,11 @@ fun ImportImageScreen() {
         isBusy = true
         scope.launch {
             try {
-                // Your existing loader (returns a Bitmap)
-                val srcBitmap = com.example.docscan.logic.utils.FileOps.loadImageFromUri(context, uri)
-
-                // NEW: run shared pipeline (pick the mode you want: "color", "gray", "bw", or "auto")
-                val res = runPipelineAsync(srcBitmap, mode = "color")
-
+                val bmp = FileOps.loadImageFromUri(context, uri)
+                val res = runPipelineAsync(bmp, mode = "color")
                 overlayBitmap = res.overlay
                 enhancedBitmap = res.enhanced
+                ScanSession.add(res.page)
             } catch (t: Throwable) {
                 // Optional: show a snackbar or log
                 // e.g., DebugLog.e("Import failed", tr = t)
