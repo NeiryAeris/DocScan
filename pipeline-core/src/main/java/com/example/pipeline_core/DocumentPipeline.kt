@@ -1,10 +1,11 @@
-package com.example.pipeline
+package com.example.pipeline_core
 
 import org.opencv.core.*
 import org.opencv.imgproc.CLAHE
 import org.opencv.imgproc.Imgproc
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.pow
 
 data class ProcessResult(
     val overlay: Mat,            // original with green quad
@@ -12,6 +13,33 @@ data class ProcessResult(
     val warped: Mat?,            // perspective-corrected doc (RGBA)
     val enhanced: Mat?           // enhanced output per mode
 )
+
+data class Params(
+    // ---- color mode knobs ----
+    val colorContrastAlpha: Double = 1.3,               // convertTo alpha
+    val claheClipLimit: Double = 3.0,                   // Imgproc.createCLAHE clip limit
+    val claheTileGrid: Size = Size(8.0, 8.0),           // CLAHE tile size
+    val bilateralDiameter: Int = 7,                     // bilateral filter d
+    val bilateralSigmaColor: Double = 50.0,
+    val bilateralSigmaSpace: Double = 50.0,
+    val sharpenAlpha: Double = 1.4,                     // addWeighted(denoised, alpha, claheOut, -beta)
+    val sharpenBeta: Double = 0.4,
+    val maskBlockFactor: Double = 55.0 / 1200.0,        // adaptiveThreshold block size scales with image minDim
+    val maskC: Double = 25.0,
+    val maskMorphKernel: Int = 2,                       // close kernel size (pixels)
+
+    // ---- bw mode knobs ----
+    val bwBlockFactor: Double = 25.0 / 1200.0,
+    val bwC: Double = 10.0,
+
+    // ---- sketch mode knobs ----
+    val sketchCannyLo: Double = 60.0,
+    val sketchCannyHi: Double = 180.0,
+    val sketchDilate: Int = 1
+)
+
+private fun oddAtLeast(n: Int, minOdd: Int = 3) = if (n % 2 == 1) maxOf(n, minOdd) else maxOf(n + 1, minOdd)
+private fun kernel(size: Int) = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(size.toDouble(), size.toDouble()))
 
 object DocumentPipeline {
 
@@ -28,7 +56,7 @@ object DocumentPipeline {
             m.invoke(null)
         } catch (_: Throwable) {
             try {
-                System.loadLibrary(org.opencv.core.Core.NATIVE_LIBRARY_NAME)
+                System.loadLibrary(Core.NATIVE_LIBRARY_NAME)
             } catch (_: Throwable) {
                 // ignore: tests will fail loudly if loading actually didn’t work
             }
@@ -39,7 +67,7 @@ object DocumentPipeline {
      *  Expect **RGBA** input (CV_8UC4) for desktop<->Android parity.
      *  @param mode "auto" (no extra enhance), "color", "bw", or "gray"
      */
-    fun process(srcRgba: Mat, mode: String = "auto"): ProcessResult {
+    fun process(srcRgba: Mat, mode: String = "auto", params: Params = Params()): ProcessResult {
         require(srcRgba.type() == CvType.CV_8UC4) { "Provide RGBA Mat (CV_8UC4)" }
 
         val src = srcRgba
@@ -137,33 +165,44 @@ object DocumentPipeline {
     }
 
     // ---- Enhancement filters (ported) ----
-    private fun enhanceDocument(src: Mat, mode: String): Mat {
+    private fun enhanceDocument(src: Mat, mode: String, params: Params = Params()): Mat {
         val dst = Mat()
+
         when (mode) {
             "color" -> {
                 val contrast = Mat()
-                src.convertTo(contrast, -1, 1.3, 0.0)
+                src.convertTo(contrast, -1, params.colorContrastAlpha, 0.0)
 
                 val gray = Mat()
                 Imgproc.cvtColor(contrast, gray, Imgproc.COLOR_RGBA2GRAY)
 
-                val clahe: CLAHE = Imgproc.createCLAHE(3.0, Size(8.0, 8.0))
+                val clahe: CLAHE = Imgproc.createCLAHE(params.claheClipLimit, params.claheTileGrid)
                 val claheOut = Mat()
                 clahe.apply(gray, claheOut)
 
                 val denoised = Mat()
-                Imgproc.bilateralFilter(claheOut, denoised, 7, 50.0, 50.0)
+                Imgproc.bilateralFilter(
+                    claheOut, denoised,
+                    params.bilateralDiameter,
+                    params.bilateralSigmaColor,
+                    params.bilateralSigmaSpace
+                )
 
                 val sharpened = Mat()
-                Core.addWeighted(denoised, 1.4, claheOut, -0.4, 0.0, sharpened)
+                Core.addWeighted(denoised, params.sharpenAlpha, claheOut, -params.sharpenBeta, 0.0, sharpened)
 
+                // Text mask via adaptive threshold (scale block size to image size)
+                val minDim = minOf(src.rows(), src.cols())
+                val maskBlock = oddAtLeast((params.maskBlockFactor * minDim).toInt(), 15) // keep odd & >= 15
                 val mask = Mat()
                 Imgproc.adaptiveThreshold(
                     sharpened, mask, 255.0,
-                    Imgproc.ADAPTIVE_THRESH_MEAN_C, Imgproc.THRESH_BINARY_INV,
-                    55, 25.0
+                    Imgproc.ADAPTIVE_THRESH_MEAN_C,
+                    Imgproc.THRESH_BINARY_INV,
+                    maskBlock, params.maskC
                 )
 
+                // Close small gaps in mask
                 val k = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(2.0, 2.0))
                 Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_CLOSE, k)
 
@@ -176,30 +215,78 @@ object DocumentPipeline {
             }
 
             "bw" -> {
+                // Strong black/white
                 val gray = Mat()
                 Imgproc.cvtColor(src, gray, Imgproc.COLOR_RGBA2GRAY)
+                val minDim = minOf(src.rows(), src.cols())
+                val block = oddAtLeast((params.bwBlockFactor * minDim).toInt(), 15)
                 Imgproc.adaptiveThreshold(
                     gray, dst, 255.0,
-                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY,
-                    25, 10.0
+                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    Imgproc.THRESH_BINARY,
+                    block, params.bwC
                 )
-                // keep RGBA out for parity
-                val rgba = Mat()
-                Imgproc.cvtColor(dst, rgba, Imgproc.COLOR_GRAY2RGBA)
-                rgba.copyTo(dst)
-                gray.release(); rgba.release()
+                gray.release()
             }
 
-            "gray" -> {
-                Imgproc.cvtColor(src, dst, Imgproc.COLOR_RGBA2GRAY)
-                val rgba = Mat()
-                Imgproc.cvtColor(dst, rgba, Imgproc.COLOR_GRAY2RGBA)
-                rgba.copyTo(dst)
-                rgba.release()
+            "sketch" -> {
+                // Bước 1️⃣: Grayscale
+                val gray = Mat()
+                Imgproc.cvtColor(src, gray, Imgproc.COLOR_RGBA2GRAY)
+//                Imgcodecs.imwrite("build/test-output/step1_gray.jpg", gray)
+
+                // Bước 2️⃣: Preserve vùng cực trị (clip shadow / highlight)
+                val clipped = Mat()
+                Core.min(gray, Scalar(245.0), clipped)
+                Core.max(clipped, Scalar(10.0), clipped)
+//                Imgcodecs.imwrite("build/test-output/step2_clipped.jpg", clipped)
+
+                // Bước 3️⃣: Background normalization (khử bóng – kernel lớn hơn để tránh mất tương phản nội vùng)
+                val bg = Mat()
+                Imgproc.medianBlur(clipped, bg, 101)
+                val norm = Mat()
+                Core.divide(clipped, bg, norm, 255.0)
+//                Imgcodecs.imwrite("build/test-output/step3_normalized.jpg", norm)
+
+                // Bước 4️⃣: Căng dải sáng (0–255)
+                val stretched = Mat()
+                Core.normalize(norm, stretched, 0.0, 255.0, Core.NORM_MINMAX)
+//                Imgcodecs.imwrite("build/test-output/step4_stretched.jpg", stretched)
+
+                // Bước 5️⃣: CLAHE (tăng micro-contrast)
+                val clahe = Imgproc.createCLAHE(2.0, Size(4.0, 4.0))
+                val claheOut = Mat()
+                clahe.apply(stretched, claheOut)
+//                Imgcodecs.imwrite("build/test-output/step5_clahe.jpg", claheOut)
+
+                // Bước 6️⃣: Làm nét (Unsharp Mask)
+                val blurred = Mat()
+                Imgproc.GaussianBlur(claheOut, blurred, Size(5.0, 5.0), 0.0)
+                val sharpened = Mat()
+                Core.addWeighted(claheOut, 1.6, blurred, -0.6, 0.0, sharpened)
+//                Imgcodecs.imwrite("build/test-output/step6_sharpened.jpg", sharpened)
+
+                // Bước 7️⃣: Gamma correction (tăng sáng vùng trung tính)
+                val gammaCorrected = Mat()
+                val lutArray = ByteArray(256) { i ->
+                    ((i / 255.0).pow(0.85) * 255.0).toInt().coerceIn(0, 255).toByte()
+                }
+                val gammaLut = Mat(1, 256, CvType.CV_8U)
+                gammaLut.put(0, 0, lutArray)
+                Core.LUT(sharpened, gammaLut, gammaCorrected)
+//                Imgcodecs.imwrite("build/test-output/step7_gamma.jpg", gammaCorrected)
+                gammaLut.release()
+
+                gammaCorrected.copyTo(dst)
+
+                listOf(gray, clipped, bg, norm, stretched, claheOut, blurred, sharpened, gammaCorrected)
+                    .forEach { it.release() }
             }
 
-            else -> src.copyTo(dst) // "auto" or unknown -> no extra enhance
+
+            else -> src.copyTo(dst) // "auto" falls back for now; we’ll improve auto later
         }
+
         return dst
     }
 
