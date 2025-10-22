@@ -41,7 +41,7 @@ interface Imaging {
     fun threshold(src: ImageRef, blur: ImageRef): ImageRef
     fun canny(src: ImageRef, threshold1: Double = 50.0, threshold2: Double = 150.0): ImageRef
     fun morphologyEx(src: ImageRef, kernel: ImageRef): ImageRef
-    fun findContours(src: ImageRef): List<List<Point>> // Replace MatOfPoint with List<Point>
+    fun findContours(src: ImageRef): List<List<Point>>
     fun fourPointWarp(src: ImageRef, quad: Array<Point>): ImageRef
     fun enhanceDocument(src: ImageRef, mode: String): ImageRef
 }
