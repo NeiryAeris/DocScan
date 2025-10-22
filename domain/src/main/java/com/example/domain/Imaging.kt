@@ -6,7 +6,7 @@ interface Imaging {
     fun fromBytes(jpeg: ByteArray): ImageRef
 
     // Convert an image reference back to a JPEG byte array
-//    fun toJpeg(img: ImageRef, quality: Int = 85): ByteArray
+    fun toJpeg(img: ImageRef, quality: Int = 85): ByteArray
 
     // Returns 8 floats (x0,y0,x1,y1,x2,y2,x3,y3) in clockwise order, or null if not found.
     fun detectDocumentQuad(src: ImageRef): FloatArray?
