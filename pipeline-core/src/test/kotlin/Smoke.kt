@@ -74,7 +74,7 @@ class Smoke {
         val outDir = java.io.File("build/test-output").apply { mkdirs() }
 
         // Run SKETCH mode only
-        val r = DocumentPipeline.process(rgba, "sketch")
+        val r = DocumentPipeline.process(rgba, "auto")
 //        Imgcodecs.imwrite("${outDir.path}/sketch_overlay.png", r.overlay)
 //        r.warped?.let { Imgcodecs.imwrite("${outDir.path}/sketch_warped.png", it) }
         r.enhanced?.let { Imgcodecs.imwrite("${outDir.path}/sketch_enhanced.png", it) }
