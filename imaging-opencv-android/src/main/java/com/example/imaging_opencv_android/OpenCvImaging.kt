@@ -14,7 +14,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 
-class OpenCvImaging : Imaging {
+class OpenCvImaging(private val cfg: ImagingConfig = ImagingConfig()) : Imaging {
 
     // ------------------ helpers / conversions ------------------
 
@@ -61,7 +61,7 @@ class OpenCvImaging : Imaging {
     }
 
     private data class Downscale(val scaled: Mat, val scale: Double)
-    private fun downscaleForDetect(src: Mat, targetMaxSide: Int = 1000): Downscale {
+    private fun downscaleForDetect(src: Mat, targetMaxSide: Int = cfg.detect.downscaleMaxSide): Downscale {
         val w = src.width().toDouble()
         val h = src.height().toDouble()
         val maxDim = max(w, h)
@@ -89,17 +89,17 @@ class OpenCvImaging : Imaging {
     override fun detectDocumentQuad(src: ImageRef): FloatArray? {
         val full = requireMat(src)
         // 1) Downscale for speed & robustness
-        val (scaled, scale) = downscaleForDetect(full, 1000)
+        val (scaled, scale) = downscaleForDetect(full)
 
         // 2) GRAY -> BLUR -> OTSU (binary)
         val g = toGrayOwned(scaled)
         val blur = Mat()
-        Imgproc.GaussianBlur(g, blur, Size(5.0, 5.0), 0.0)
+        Imgproc.GaussianBlur(g, blur, Size(cfg.detect.blurK.toDouble(), cfg.detect.blurK.toDouble()), 0.0)
         val bin = Mat()
         Imgproc.threshold(blur, bin, 0.0, 255.0, Imgproc.THRESH_BINARY or Imgproc.THRESH_OTSU)
 
         // 3) Morphological CLOSE to bridge gaps
-        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(7.0, 7.0))
+        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(cfg.detect.closeK.toDouble(), cfg.detect.closeK.toDouble()))
         val closed = Mat()
         Imgproc.morphologyEx(bin, closed, Imgproc.MORPH_CLOSE, kernel)
 
@@ -119,15 +119,15 @@ class OpenCvImaging : Imaging {
                 Pair(c, a)
             }
             .sortedByDescending { it.second }
-            .take(15) // top 15
-            .filter { it.second in (imgArea * 0.02)..(imgArea * 0.90) } // ignore tiny & near-full-rect
+            .take(cfg.detect.topN) // top 15
+            .filter { it.second in (imgArea * cfg.detect.areaMinRatio)..(imgArea * cfg.detect.areaMaxRatio) } // ignore tiny & near-full-rect
 
         var best: MatOfPoint2f? = null
         var bestArea = 0.0
 
         topN.forEach { (c, _) ->
             val c2f = MatOfPoint2f(*c.toArray())
-            val approx = approxPoly(c2f, epsRatio = 0.08) // looser epsilon than default for doc shapes
+            val approx = approxPoly(c2f, epsRatio = cfg.detect.approxEpsRatio) // looser epsilon than default for doc shapes
             val mop = MatOfPoint(*approx.toArray())
             val convex = Imgproc.isContourConvex(mop)
             val a = if (approx.total().toInt() == 4) contourAreaAbs(approx) else 0.0
@@ -149,7 +149,7 @@ class OpenCvImaging : Imaging {
             // treat the earlier "closed" as mask; we already released it, but we can re-create quickly:
             // Use a light Canny to create a mask fallback
             val g2 = toGrayOwned(scaled)
-            Imgproc.Canny(g2, mask, 50.0, 150.0)
+            Imgproc.Canny(g2, mask, cfg.detect.canny1, cfg.detect.canny2)
             val nz = MatOfPoint()
             findNonZero(mask, nz)
             mask.release(); g2.release()
@@ -460,7 +460,7 @@ class OpenCvImaging : Imaging {
                 val gMat = requireMat(g)
                 // Background estimation by median (ksize scales with minDim)
                 val minDim = min(gMat.width(), gMat.height())
-                val bgK = ensureOddPositive(max(31, minDim / 20))
+                val bgK = ensureOddPositive(max(31, minDim / cfg.enhance.autoPro.medianKFactor))
                 val bg = Mat()
                 Imgproc.medianBlur(gMat, bg, bgK)
                 // Normalize: g / bg * 255
@@ -468,8 +468,8 @@ class OpenCvImaging : Imaging {
                 Core.divide(gMat, bg, norm, 255.0)
                 // CLAHE gentle
                 val clahe = Imgproc.createCLAHE().apply {
-                    setClipLimit(2.0)
-                    setTilesGridSize(Size(4.0, 4.0))
+                    clipLimit = cfg.enhance.autoPro.claheClip
+                    tilesGridSize = Size(cfg.enhance.autoPro.claheTiles.toDouble(), cfg.enhance.autoPro.claheTiles.toDouble())
                 }
                 val cla = Mat()
                 clahe.apply(norm, cla)
@@ -477,11 +477,11 @@ class OpenCvImaging : Imaging {
                 val sharp = Mat()
                 Imgproc.GaussianBlur(cla, sharp, Size(0.0, 0.0), 1.0) // blur into 'sharp' temp
                 val un = Mat()
-                Core.addWeighted(cla, 1.6, sharp, -0.6, 0.0, un)
+                Core.addWeighted(cla, cfg.enhance.autoPro.unsharpA, sharp, cfg.enhance.autoPro.unsharpB, 0.0, un)
                 // Gamma 0.85 LUT
                 val lut = Mat(1, 256, CvType.CV_8UC1)
                 val buf = ByteArray(256) { i ->
-                    val v = (255.0 * (i / 255.0).pow(0.85)).toInt().coerceIn(0, 255)
+                    val v = (255.0 * (i / 255.0).pow(cfg.enhance.autoPro.gamma)).toInt().coerceIn(0, 255)
                     v.toByte()
                 }
                 lut.put(0, 0, buf)
