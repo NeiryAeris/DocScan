@@ -21,6 +21,8 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation(libs.junit)
+
+    implementation(project(":domain"))
 }
 
 tasks.test {

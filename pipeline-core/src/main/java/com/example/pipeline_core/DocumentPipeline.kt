@@ -72,7 +72,7 @@ object DocumentPipeline {
 
         val src = srcRgba
 
-        // --- Resize for detection speed (same as your script) ---
+        // --- Resize for detection speed---
         val maxSide = 1000.0
         val h = src.rows()
         val w = src.cols()
@@ -229,44 +229,44 @@ object DocumentPipeline {
                 gray.release()
             }
 
-            "sketch" -> {
-                // Bước 1️⃣: Grayscale
+            "auto" -> {
+                // Bước 1️: Grayscale
                 val gray = Mat()
                 Imgproc.cvtColor(src, gray, Imgproc.COLOR_RGBA2GRAY)
 //                Imgcodecs.imwrite("build/test-output/step1_gray.jpg", gray)
 
-                // Bước 2️⃣: Preserve vùng cực trị (clip shadow / highlight)
+                // Bước 2️: Preserve vùng cực trị (clip shadow / highlight)
                 val clipped = Mat()
                 Core.min(gray, Scalar(245.0), clipped)
                 Core.max(clipped, Scalar(10.0), clipped)
 //                Imgcodecs.imwrite("build/test-output/step2_clipped.jpg", clipped)
 
-                // Bước 3️⃣: Background normalization (khử bóng – kernel lớn hơn để tránh mất tương phản nội vùng)
+                // Bước 3️: Background normalization (khử bóng – kernel lớn hơn để tránh mất tương phản nội vùng)
                 val bg = Mat()
                 Imgproc.medianBlur(clipped, bg, 101)
                 val norm = Mat()
                 Core.divide(clipped, bg, norm, 255.0)
 //                Imgcodecs.imwrite("build/test-output/step3_normalized.jpg", norm)
 
-                // Bước 4️⃣: Căng dải sáng (0–255)
+                // Bước 4️: Căng dải sáng (0–255)
                 val stretched = Mat()
                 Core.normalize(norm, stretched, 0.0, 255.0, Core.NORM_MINMAX)
 //                Imgcodecs.imwrite("build/test-output/step4_stretched.jpg", stretched)
 
-                // Bước 5️⃣: CLAHE (tăng micro-contrast)
+                // Bước 5️: CLAHE (tăng micro-contrast)
                 val clahe = Imgproc.createCLAHE(2.0, Size(4.0, 4.0))
                 val claheOut = Mat()
                 clahe.apply(stretched, claheOut)
 //                Imgcodecs.imwrite("build/test-output/step5_clahe.jpg", claheOut)
 
-                // Bước 6️⃣: Làm nét (Unsharp Mask)
+                // Bước 6️: Làm nét (Unsharp Mask)
                 val blurred = Mat()
                 Imgproc.GaussianBlur(claheOut, blurred, Size(5.0, 5.0), 0.0)
                 val sharpened = Mat()
                 Core.addWeighted(claheOut, 1.6, blurred, -0.6, 0.0, sharpened)
 //                Imgcodecs.imwrite("build/test-output/step6_sharpened.jpg", sharpened)
 
-                // Bước 7️⃣: Gamma correction (tăng sáng vùng trung tính)
+                // Bước 7️: Gamma correction (tăng sáng vùng trung tính)
                 val gammaCorrected = Mat()
                 val lutArray = ByteArray(256) { i ->
                     ((i / 255.0).pow(0.85) * 255.0).toInt().coerceIn(0, 255).toByte()

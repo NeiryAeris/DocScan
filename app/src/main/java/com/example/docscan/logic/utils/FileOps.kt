@@ -18,47 +18,66 @@ class FileOps {
     companion object {
 
         // Parse the `Bitmap` from `inputStream`
-        fun getBitmapFromStream( inputStream: InputStream ) : Bitmap {
-            val bitmap = BitmapFactory.decodeStream( inputStream )
-            inputStream.close()
-            return bitmap
-        }
+        // Replace ONLY this function in your existing FileOps.kt
+        fun loadImageFromUri(context: Context, imageUri: Uri): Bitmap {
+            val maxDim = 3000 // optional safety to avoid 50MB+ allocations
 
-        // Save the given Image to user's file storage
-        fun saveImage( context: Context , image : Bitmap , filename : String ) : Uri {
-            // Android Filesystem oh!
-            // Refer to this blog -> https://www.simplifiedcoding.net/android-save-bitmap-to-gallery/
-            val contentValues = ContentValues().apply {
-                put( MediaStore.Images.ImageColumns.DISPLAY_NAME , filename )
-                put( MediaStore.Images.ImageColumns.DATE_TAKEN , System.currentTimeMillis() )
-                put( MediaStore.Images.ImageColumns.MIME_TYPE , "image/png" )
-                if ( Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ) {
-                    put( MediaStore.Images.ImageColumns.RELATIVE_PATH , Environment.DIRECTORY_PICTURES
-                            + "/${context.getString(R.string.app_name)}" )
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val source = ImageDecoder.createSource(context.contentResolver, imageUri)
+                val raw = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                    // CRITICAL: prevent HARDWARE config
+                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                    decoder.isMutableRequired = true
+
+                    // Optional downscale at decode time to save RAM on giant photos
+                    val w = info.size.width
+                    val h = info.size.height
+                    val biggest = maxOf(w, h)
+                    if (biggest > maxDim) {
+                        val sample = (biggest + maxDim - 1) / maxDim // ceil
+                        decoder.setTargetSampleSize(sample)
+                    }
+
+                    // Keep sRGB to avoid weird color spaces
+                    decoder.setTargetColorSpace(android.graphics.ColorSpace.get(
+                        android.graphics.ColorSpace.Named.SRGB
+                    ))
+                }
+
+                // Ensure ARGB_8888 + mutable (some devices still return immutable)
+                if (raw.config != Bitmap.Config.ARGB_8888 || !raw.isMutable) {
+                    raw.copy(Bitmap.Config.ARGB_8888, /*mutable=*/true).also { raw.recycle() }
+                } else {
+                    raw
+                }
+            } else {
+                // Legacy path: decode as ARGB_8888, mutable, with bounds->sample to avoid OOM
+                val resolver = context.contentResolver
+                // 1) bounds
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                resolver.openInputStream(imageUri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+
+                val sample = run {
+                    val biggest = maxOf(bounds.outWidth, bounds.outHeight).coerceAtLeast(1)
+                    if (biggest > maxDim) (biggest + maxDim - 1) / maxDim else 1
+                }
+
+                // 2) decode
+                val opts = BitmapFactory.Options().apply {
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                    inMutable = true
+                    inSampleSize = sample
+                }
+                val bmp = resolver.openInputStream(imageUri)?.use {
+                    BitmapFactory.decodeStream(it, null, opts)
+                } ?: error("Cannot decode image from $imageUri")
+
+                if (bmp.config != Bitmap.Config.ARGB_8888 || !bmp.isMutable) {
+                    bmp.copy(Bitmap.Config.ARGB_8888, true).also { bmp.recycle() }
+                } else {
+                    bmp
                 }
             }
-            val fileUri = context.contentResolver.insert( MediaStore.Images.Media.EXTERNAL_CONTENT_URI , contentValues )
-            val fileOutputStream =  context.contentResolver.openOutputStream( fileUri!! )!!
-            fileOutputStream.use{
-                image.compress( Bitmap.CompressFormat.PNG , 100 , it )
-                it.flush()
-            }
-            return fileUri
         }
-
-        // Load the Bitmap from given imageUri
-        fun loadImageFromUri( context: Context , imageUri : Uri ) : Bitmap {
-            return if ( Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ) {
-                // Use the ImageDecoder class as `MediaStore.Images.Media.getBitmap` was deprecated
-                val source = ImageDecoder.createSource(context.contentResolver, imageUri)
-                ImageDecoder.decodeBitmap(source)
-            } else {
-                // On older devices, we use can use the `MediaStore.Images.Media.getBitmap` method
-                MediaStore.Images.Media.getBitmap( context.contentResolver, imageUri)
-            }
-        }
-
-
     }
-
 }
