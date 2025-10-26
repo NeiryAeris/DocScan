@@ -23,6 +23,7 @@ dependencies {
     testImplementation(libs.junit)
 
     implementation(project(":domain"))
+//    implementation(project(":imaging-opencv-android"))
 }
 
 tasks.test {
