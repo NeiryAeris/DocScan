@@ -12,6 +12,7 @@ kotlin {
 }
 
 dependencies {
+    testImplementation(project(":imaging-opencv-android"))
     // Desktop OpenCV with org.opencv.* API + bundled natives
     compileOnly(libs.openpnp.opencv)
 
@@ -23,7 +24,7 @@ dependencies {
     testImplementation(libs.junit)
 
     implementation(project(":domain"))
-//    implementation(project(":imaging-opencv-android"))
+    implementation(project(":imaging-opencv-android"))
 }
 
 tasks.test {
