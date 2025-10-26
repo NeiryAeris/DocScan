@@ -24,7 +24,11 @@ class DocumentLayouterSmokeTest {
             tol = 0.08
         )
 
-        val bytes = resourceBytes("samples/sample_1.jpg")
+        var sample: String = "test_subject.jpg"
+
+//        val input = locate("samples/$sample")
+
+        val bytes = resourceBytes(sample)
         val src = imaging.fromBytes(bytes)
         val quad = imaging.detectDocumentQuad(src) ?: error("No document quad detected")
 
