@@ -24,7 +24,7 @@ class DocumentLayouterSmokeTest {
             tol = 0.08
         )
 
-        var sample: String = "test_subject.jpg"
+        var sample: String = "Sample_1.jpg"
 
 //        val input = locate("samples/$sample")
 
