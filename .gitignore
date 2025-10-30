@@ -3,7 +3,8 @@
 # ======================
 .gradle/
 build/
-/*/build/
+*/build/
+/pipeline-core/build
 !gradle/wrapper/gradle-wrapper.jar
 
 # ======================
@@ -75,3 +76,4 @@ reports/
 .vscode/
 .cxx/
 cmake-build-*/
+
