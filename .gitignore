@@ -1,9 +1,12 @@
 # ======================
 # Android / Gradle build
 # ======================
+.gradle
 .gradle/
 build/
+/build
 */build/
+/*/build/
 /pipeline-core/build
 !gradle/wrapper/gradle-wrapper.jar
 
@@ -11,6 +14,7 @@ build/
 # Local configuration
 # ======================
 local.properties
+/local.properties
 *.keystore
 *.jks
 *.pem
@@ -18,7 +22,7 @@ local.properties
 # ======================
 # IntelliJ / Android Studio
 # ======================
-.idea/
+/.idea/
 *.iml
 *.ipr
 *.iws
@@ -76,4 +80,3 @@ reports/
 .vscode/
 .cxx/
 cmake-build-*/
-
