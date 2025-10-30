@@ -17,14 +17,22 @@ import com.example.docscan.ui.components.SectionTitle
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen() {
+
+    // Lấy màu primary từ theme
+    val primaryColor = MaterialTheme.colorScheme.primary
+    // (Không cần onPrimaryColor nữa)
+
     val homeActions = listOf(
-        ActionItemData(Icons.Default.Scanner, "Quét"),
+        // Cập nhật mục "Quét"
+        ActionItemData(
+            icon = Icons.Default.Scanner,
+            label = "Quét",
+            // backgroundColor = null, // (Bỏ qua để dùng màu mặc định)
+            iconTintColor = primaryColor // <-- Chỉ đổi màu icon
+        ),
         ActionItemData(Icons.Default.PictureAsPdf, "Công cụ PDF"),
         ActionItemData(Icons.Default.Image, "Nhập ảnh"),
-        ActionItemData(Icons.Default.UploadFile, "Nhập tập tin"),
-        ActionItemData(Icons.Default.CreditCard, "Thẻ ID"),
-        ActionItemData(Icons.Default.TextFields, "Trích xuất văn bản"),
-        ActionItemData(Icons.Default.AutoAwesome, "Solver AI"),
+        // Các mục đã bị loại bỏ ở yêu cầu trước
         ActionItemData(Icons.Default.MoreHoriz, "Tất cả")
     )
 
