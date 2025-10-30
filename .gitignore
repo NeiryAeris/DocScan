@@ -1,16 +1,82 @@
-*.iml
+# ======================
+# Android / Gradle build
+# ======================
 .gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
+.gradle/
+build/
 /build
-/captures
-.externalNativeBuild
-.cxx
+*/build/
+/*/build/
+/pipeline-core/build
+!gradle/wrapper/gradle-wrapper.jar
+
+# ======================
+# Local configuration
+# ======================
 local.properties
-/OpenCV-android-sdk/
+/local.properties
+*.keystore
+*.jks
+*.pem
+
+# ======================
+# IntelliJ / Android Studio
+# ======================
+/.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# ======================
+# OS generated
+# ======================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+*.stackdump
+
+# ======================
+# Logs & temp
+# ======================
+*.log
+*.tmp
+*.temp
+*.cache
+.cache/
+logs/
+captures/
+
+# ======================
+# Test & debug output
+# ======================
+*.apk
+*.ap_
+*.aab
+*.hprof
+*.mp4
+*.trace
+*.json
+*.xml
+*.jpg
+*.png
+test-output/
+outputs/
+reports/
+*.csv
+
+# ======================
+# Kotlin / Java
+# ======================
+*.class
+*.jar
+*.war
+*.ear
+*.dex
+
+# ======================
+# Misc tooling
+# ======================
+.vscode/
+.cxx/
+cmake-build-*/
