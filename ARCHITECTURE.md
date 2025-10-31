@@ -30,6 +30,35 @@ This section provides a high-level overview of the project's directory and file 
 │   │   ├── main/
 │   │   │   ├── kotlin/com/example/imaging/
 │   │   │   └── build.gradle.kts
+├── ocr-core/                         # Contracts OCR (pure Kotlin)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── kotlin/com/example/ocr/core/
+│   │   │   │   ├── api/                     # OcrEngine, OcrResult, OcrPolicy, TextLayer models
+│   │   │   └── build.gradle.kts
+│   │   └── build.gradle.kts                 # Cấu hình module ocr-core
+│
+├── ocr-mlkit-android/                # OCR on-device (engine A)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── kotlin/com/example/ocr/mlkit/
+│   │   │   └── build.gradle.kts
+│   │   └── build.gradle.kts                 # Cấu hình module ocr-mlkit-android
+│
+├── ocr-tesseract-android/            # (Tuỳ chọn) OCR on-device (engine B – Tesseract)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── kotlin/com/example/ocr/tesseract/
+│   │   │   └── build.gradle.kts
+│   │   └── build.gradle.kts                 # Cấu hình module ocr-tesseract-android
+│
+├── ocr-remote/                       # (Tuỳ chọn) Client gọi OCR cloud (HTTP)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── kotlin/com/example/ocr/remote/
+│   │   │   └── build.gradle.kts
+│   │   └── build.gradle.kts                 # Cấu hình module ocr-remote
+│
 ├── exporter-pdf-android/      # PDF export functionality for processed images
 │   ├── src/
 │   │   ├── main/
