@@ -22,7 +22,7 @@ local.properties
 # ======================
 # IntelliJ / Android Studio
 # ======================
-/.idea/
+.idea/
 *.iml
 *.ipr
 *.iws
