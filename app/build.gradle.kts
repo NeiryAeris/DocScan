@@ -44,6 +44,8 @@ dependencies {
     implementation(project(":pipeline-core")) {
         exclude(group = "org.openpnp", module = "opencv")
     }
+    implementation(project(":ocr-core"))
+    implementation(project(":ocr-mlkit-android"))
     // Compose BOM
     implementation(platform(libs.androidx.compose.bom))
 
@@ -88,5 +90,6 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.material)
     implementation(libs.androidx.material.icons.extended.android)
+    implementation(libs.kotlinx.coroutines.android)
 
 }

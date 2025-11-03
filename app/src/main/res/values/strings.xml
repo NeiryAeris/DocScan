@@ -7,4 +7,6 @@
         The app requires the storage permission to access pictures on your device. The app could only
         access those pictures that you have selected.
     </string>
+    <string name="text_extraction_decode_error">Không thể đọc nội dung ảnh đã chọn.</string>
+    <string name="text_extraction_unknown_error">Có lỗi xảy ra khi trích xuất văn bản.</string>
 </resources>
