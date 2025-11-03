@@ -10,6 +10,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,16 +20,18 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import com.example.docscan.logic.utils.FileOps
 import com.example.docscan.logic.utils.AndroidPdfExporter
 import com.example.docscan.logic.utils.runPipelineAsync
 import com.example.docscan.logic.utils.ScanSession
+import com.example.docscan.ui.navigation.Routes
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(navController: NavController? = null) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -97,6 +101,9 @@ fun MainScreen() {
                     )
                 },
                 actions = {
+                    IconButton(onClick = { navController?.navigate(Routes.TextExtraction) }) {
+                        Icon(imageVector = Icons.Default.TextFields, contentDescription = "Trích xuất văn bản")
+                    }
                     Text(
                         "Pages: ${ScanSession.count}",
                         style = MaterialTheme.typography.labelLarge,
