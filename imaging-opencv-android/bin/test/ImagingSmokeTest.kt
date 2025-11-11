@@ -1,7 +1,7 @@
 import com.example.imaging_opencv_android.OpenCvImaging
 
-import com.example.domain.Point
-import com.example.domain.Size
+import com.example.domain.types.Point
+import com.example.domain.types.Size
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import java.nio.file.Files

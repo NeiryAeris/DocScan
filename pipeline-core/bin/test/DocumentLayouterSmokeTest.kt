@@ -1,6 +1,6 @@
 package com.example.pipeline_core
 
-import com.example.domain.Imaging
+import com.example.domain.interfaces.Imaging
 import com.example.imaging_opencv_android.OpenCvImaging
 import kotlin.test.Test
 import kotlin.test.assertTrue

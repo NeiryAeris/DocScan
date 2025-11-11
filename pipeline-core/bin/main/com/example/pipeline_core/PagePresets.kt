@@ -1,6 +1,6 @@
 package com.example.pipeline_core
 
-import com.example.domain.Size
+import com.example.domain.types.Size
 
 private fun mmToPx(mm: Double, dpi: Int) = ((mm / 25.4) * dpi).toInt()
 

@@ -1,8 +1,8 @@
 package com.example.pipeline_core
 
-import com.example.domain.ImageRef
-import com.example.domain.Imaging
-import com.example.domain.Size
+import com.example.domain.types.ImageRef
+import com.example.domain.interfaces.Imaging
+import com.example.domain.types.Size
 
 class DocumentLayouter(
     private val imaging: Imaging,

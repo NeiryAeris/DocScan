@@ -1,4 +1,4 @@
-package com.example.domain
+package com.example.domain.types
 
 data class Document(
     val id: String,

@@ -1,4 +1,8 @@
-package com.example.domain
+package com.example.domain.interfaces
+
+import com.example.domain.types.ImageRef
+import com.example.domain.types.Point
+import com.example.domain.types.Size
 
 // Interface for image processing
 interface Imaging {

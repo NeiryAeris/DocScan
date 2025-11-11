@@ -1,4 +1,4 @@
-package com.example.domain
+package com.example.domain.types
 
 // PipelineParams class to hold configuration parameters for image processing
 data class PipelineParams(

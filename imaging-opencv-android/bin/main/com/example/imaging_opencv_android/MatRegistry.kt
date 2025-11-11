@@ -1,6 +1,6 @@
 package com.example.imaging_opencv_android
 
-import com.example.domain.ImageRef
+import com.example.domain.types.ImageRef
 import org.opencv.core.Mat
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean

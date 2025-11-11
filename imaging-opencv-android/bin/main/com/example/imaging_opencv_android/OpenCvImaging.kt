@@ -1,9 +1,9 @@
 package com.example.imaging_opencv_android
 
-import com.example.domain.ImageRef
-import com.example.domain.Imaging
-import com.example.domain.Point
-import com.example.domain.Size
+import com.example.domain.types.ImageRef
+import com.example.domain.interfaces.Imaging
+import com.example.domain.types.Point
+import com.example.domain.types.Size
 import org.opencv.core.*
 import org.opencv.core.Core.findNonZero
 import org.opencv.imgproc.Imgproc
