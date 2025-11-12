@@ -40,7 +40,7 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 
-    compile 'com.rmtheis:tess-two:5.4.1'
+    implementation(libs.tess.two)
 
     implementation(project(":ocr-core"))
 }

@@ -24,6 +24,7 @@ composeBomVersion = "2025.09.00"
 material3 = "1.5.0-alpha04"
 opencvAndroid = "4.5.1"
 opencvVersion = "4.9.0-0"
+tessTwo = "9.1.0"
 ui = "1.10.0-alpha03"
 foundation = "1.10.0-alpha03"
 uiToolingPreview = "1.10.0-alpha03"
@@ -73,6 +74,7 @@ compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = 
 material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
 opencv-android = { module = "org.opencv:opencv-android", version.ref = "opencvAndroid" }
 openpnp-opencv = { module = "org.openpnp:opencv", version.ref = "opencvVersion" }
+tess-two = { module = "com.rmtheis:tess-two", version.ref = "tessTwo" }
 ui = { group = "androidx.compose.ui", name = "ui", version.ref = "ui" }
 androidx-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
 ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
