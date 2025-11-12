@@ -1,136 +1,72 @@
 package com.example.ocr.mlkit
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Point
-import android.graphics.Rect
-import com.example.ocr.core.api.OcrBoundingBox
-import com.example.ocr.core.api.OcrEngine
-import com.example.ocr.core.api.OcrException
-import com.example.ocr.core.api.OcrImageFormat
-import com.example.ocr.core.api.OcrPoint
-import com.example.ocr.core.api.OcrRequest
-import com.example.ocr.core.api.OcrResult
-import com.example.ocr.core.api.OcrTextBlock
-import com.example.ocr.core.api.OcrTextElement
-import com.example.ocr.core.api.OcrTextLine
+import android.graphics.Bitmap.Config
+import com.example.ocr.core.api.*
 import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.TextRecognizerOptionsInterface
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import kotlinx.coroutines.suspendCancellableCoroutine
-import java.io.ByteArrayOutputStream
-import java.io.Closeable
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+import kotlin.system.measureTimeMillis
 
-/**
- * ML Kit implementation of [OcrEngine] that performs text recognition fully on device.
- */
-class MlKitOcrEngine(
-    options: TextRecognizerOptionsInterface = TextRecognizerOptions.DEFAULT_OPTIONS
-) : OcrEngine, Closeable {
+class MlKitOcrEngine : OcrEngine {
 
-    private val recognizer = TextRecognition.getClient(options)
+    private val client by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
 
-    override suspend fun recognize(request: OcrRequest): OcrResult {
-        val image = try {
-            request.toInputImage()
-        } catch (t: Throwable) {
-            throw OcrException("Unable to prepare image for OCR", t)
+    override suspend fun recognize(image: OcrImage, lang: String): OcrPageResult {
+        val bmp = when (image) {
+            is OcrImage.Gray8 -> gray8ToBitmap(image)
+            is OcrImage.Rgba8888 -> rgbaToBitmap(image)
         }
-
-        val text = try {
-            recognizer.process(image).await()
-        } catch (t: Throwable) {
-            throw OcrException("Text recognition failed", t)
+        var text = ""
+        val elapsed = measureTimeMillis {
+            val result = client.process(InputImage.fromBitmap(bmp, 0)).await()
+            val sb = StringBuilder()
+            result.textBlocks.forEach { b -> b.lines.forEach { l -> sb.appendLine(l.text) } }
+            text = sb.toString()
         }
-
-        return text.toResult(request.width, request.height)
+        return OcrPageResult(pageNo = 0, text = text, durationMs = elapsed)
     }
 
-    override fun close() {
-        recognizer.close()
+    private fun gray8ToBitmap(g: OcrImage.Gray8): Bitmap {
+        // Expand gray to ARGB for InputImage.fromBitmap
+        val out = Bitmap.createBitmap(g.width, g.height, Config.ARGB_8888)
+        val pixels = IntArray(g.width * g.height)
+        var di = 0
+        var si = 0
+        val w = g.width
+        for (y in 0 until g.height) {
+            val rowStart = si
+            for (x in 0 until w) {
+                val v = g.bytes[rowStart + x].toInt() and 0xFF
+                pixels[di++] = (0xFF shl 24) or (v shl 16) or (v shl 8) or v
+            }
+            si += g.rowStride
+        }
+        out.setPixels(pixels, 0, w, 0, 0, w, g.height)
+        return out
+    }
+
+    private fun rgbaToBitmap(r: OcrImage.Rgba8888): Bitmap {
+        val out = Bitmap.createBitmap(r.width, r.height, Config.ARGB_8888)
+        // ByteArray RGBA -> Int ARGB
+        val pixels = IntArray(r.width * r.height)
+        var di = 0
+        var si = 0
+        val w = r.width
+        for (y in 0 until r.height) {
+            val row = si
+            var xOff = 0
+            repeat(w) {
+                val R = r.bytes[row + xOff].toInt() and 0xFF
+                val G = r.bytes[row + xOff + 1].toInt() and 0xFF
+                val B = r.bytes[row + xOff + 2].toInt() and 0xFF
+                val A = r.bytes[row + xOff + 3].toInt() and 0xFF
+                pixels[di++] = (A shl 24) or (R shl 16) or (G shl 8) or B
+                xOff += 4
+            }
+            si += r.rowStride
+        }
+        out.setPixels(pixels, 0, w, 0, 0, w, r.height)
+        return out
     }
 }
-
-/**
- * Create an [OcrRequest] from a [Bitmap]. The bitmap is compressed to JPEG internally.
- */
-fun OcrRequest.Companion.fromBitmap(
-    bitmap: Bitmap,
-    rotationDegrees: Int = 0,
-    jpegQuality: Int = 95,
-): OcrRequest {
-    require(jpegQuality in 1..100) { "jpegQuality must be within 1..100" }
-    val output = ByteArrayOutputStream()
-    if (!bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, output)) {
-        throw IllegalArgumentException("Failed to compress bitmap for OCR request")
-    }
-    val bytes = output.toByteArray()
-    return OcrRequest(
-        bytes = bytes,
-        width = bitmap.width,
-        height = bitmap.height,
-        rotationDegrees = rotationDegrees,
-        format = OcrImageFormat.JPEG,
-    )
-}
-
-private fun OcrRequest.toInputImage(): InputImage = when (format) {
-    OcrImageFormat.NV21 -> InputImage.fromByteArray(
-        bytes,
-        width,
-        height,
-        rotationDegrees,
-        InputImage.IMAGE_FORMAT_NV21
-    )
-
-    OcrImageFormat.JPEG -> {
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            ?: throw OcrException("Unable to decode JPEG bytes for OCR")
-        InputImage.fromBitmap(bitmap, rotationDegrees)
-    }
-}
-
-private suspend fun <T> com.google.android.gms.tasks.Task<T>.await(): T =
-    suspendCancellableCoroutine { cont ->
-        addOnSuccessListener { result -> if (cont.isActive) cont.resume(result) }
-        addOnFailureListener { error -> if (cont.isActive) cont.resumeWithException(error) }
-        cont.invokeOnCancellation { cancel() }
-    }
-
-private fun Text.toResult(width: Int, height: Int): OcrResult = OcrResult(
-    text = text,
-    blocks = textBlocks.map { it.toBlock() },
-    width = width,
-    height = height,
-)
-
-private fun Text.TextBlock.toBlock(): OcrTextBlock = OcrTextBlock(
-    text = text,
-    boundingBox = boundingBox.toBoundingBox(),
-    cornerPoints = cornerPoints.toPoints(),
-    lines = lines.map { it.toLine() }
-)
-
-private fun Text.Line.toLine(): OcrTextLine = OcrTextLine(
-    text = text,
-    boundingBox = boundingBox.toBoundingBox(),
-    cornerPoints = cornerPoints.toPoints(),
-    elements = elements.map { it.toElement() }
-)
-
-private fun Text.Element.toElement(): OcrTextElement = OcrTextElement(
-    text = text,
-    boundingBox = boundingBox.toBoundingBox(),
-    cornerPoints = cornerPoints.toPoints(),
-    confidence = confidence
-)
-
-private fun Rect?.toBoundingBox(): OcrBoundingBox? = this?.let {
-    OcrBoundingBox(it.left, it.top, it.right, it.bottom)
-}
-
-private fun Array<Point>?.toPoints(): List<OcrPoint> = this?.map { OcrPoint(it.x, it.y) } ?: emptyList()
