@@ -12,12 +12,12 @@ sealed interface OcrImage {
         val rowStride: Int, // bytes per row (== width)
     ) : OcrImage
 
-    /** RGBA, 8bpc. */
+    /** RGBA, 8 bits per channel. */
     data class Rgba8888(
         override val width: Int,
         override val height: Int,
         val bytes: ByteArray,
-        val rowStride: Int, // bytes per row (typically width*4)
+        val rowStride: Int, // usually width * 4
         val premultiplied: Boolean = false
     ) : OcrImage
 }
