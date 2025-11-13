@@ -14,6 +14,6 @@ object TessDataInstaller {
                 am.open("tessdata/$lang.traineddata").use { it.copyTo(dst.outputStream()) }
             }
         }
-        return base.absolutePath // pass to dataPath
+        return base.absolutePath // pass to TesseractOcrEngine(dataPath)
     }
 }

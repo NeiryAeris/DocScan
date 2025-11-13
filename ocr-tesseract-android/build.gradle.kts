@@ -43,4 +43,5 @@ dependencies {
     implementation(libs.tess.two)
 
     implementation(project(":ocr-core"))
+    implementation(project(":domain"))
 }
