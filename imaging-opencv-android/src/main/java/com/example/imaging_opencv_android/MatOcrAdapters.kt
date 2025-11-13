@@ -6,7 +6,7 @@ import org.opencv.core.Mat
 import org.opencv.imgproc.Imgproc
 
 fun Mat.asOcrGray8(): OcrImage.Gray8 {
-    require(type() == CvType.CV_8UC1) { "Expected CV_8UC1 (gray), got $type" }
+    require(type() == CvType.CV_8UC1) { "Expected CV_8UC1 (gray), got ${type()}" }
     val bytes = ByteArray(rows() * cols())
     get(0, 0, bytes)
     val stride = cols() // 1 byte per pixel

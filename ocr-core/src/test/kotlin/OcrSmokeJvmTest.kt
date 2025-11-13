@@ -18,7 +18,7 @@ class OcrSmokeJvmTest {
     @Test
     fun enhancedImage_OCR_Tess4J() = runBlocking {
         // 1) Load enhanced sample (from test resources)
-        val imgPath = "ocr_samples/enhanced.jpg"
+        val imgPath = "ocr_samples/img.png"
         val bytes = resourceBytes(imgPath)
         val bi = ImageIO.read(bytes.inputStream()) ?: error("Cannot decode $imgPath")
 
