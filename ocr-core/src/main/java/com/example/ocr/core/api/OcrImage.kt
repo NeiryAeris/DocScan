@@ -9,15 +9,15 @@ sealed interface OcrImage {
         override val width: Int,
         override val height: Int,
         val bytes: ByteArray,
-        val rowStride: Int,         // bytes per row
+        val rowStride: Int, // bytes per row (== width)
     ) : OcrImage
 
-    /** RGBA, 8 bits per component, little-endian byte order. */
+    /** RGBA, 8bpc. */
     data class Rgba8888(
         override val width: Int,
         override val height: Int,
         val bytes: ByteArray,
-        val rowStride: Int,         // bytes per row (typically width*4)
+        val rowStride: Int, // bytes per row (typically width*4)
         val premultiplied: Boolean = false
     ) : OcrImage
 }

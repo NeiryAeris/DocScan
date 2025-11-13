@@ -37,12 +37,12 @@ class OcrSmokeJvmTest {
         val ocrImg = OcrImage.Gray8(
             width = gray.width,
             height = gray.height,
-            bytes = data.copyOf(),   // copy to be safe
-            rowStride = gray.width   // 1 byte per pixel
+            bytes = data.copyOf(),
+            rowStride = gray.width
         )
 
-        // 3) Prepare tessdata path (copy from test resources to a temp dir)
-        val dataDir = prepareTessdata()
+        // 3) Prepare tessdata path (copy to BOTH <base>/ and <base>/tessdata/)
+        val dataDir = prepareTessdata() // returns <base>
 
         // 4) Run OCR
         val engine = Tess4JOcrEngine(datapath = dataDir.toString())
@@ -68,20 +68,26 @@ class OcrSmokeJvmTest {
         )
     }
 
+    /**
+     * Some Tess4J builds look for <datapath>/eng.traineddata,
+     * others for <datapath>/tessdata/eng.traineddata.
+     * To be safe, copy to BOTH places and return <datapath>=<base>.
+     */
     private fun prepareTessdata(): Path {
-        // Copy eng/vie traineddata from classpath to a temp dir: <tmp>/tessdata/
         val base = Files.createTempDirectory("tess4j-data")
         val td = base.resolve("tessdata")
         Files.createDirectories(td)
 
-        fun copy(name: String) {
+        fun copyToBoth(name: String) {
             val res = "tessdata/$name"
             val url = checkNotNull(javaClass.classLoader.getResource(res)) { "Missing $res" }
-            Files.copy(Paths.get(url.toURI()), td.resolve(name), StandardCopyOption.REPLACE_EXISTING)
+            val src = Paths.get(url.toURI())
+            Files.copy(src, base.resolve(name), StandardCopyOption.REPLACE_EXISTING) // <base>/eng.traineddata
+            Files.copy(src, td.resolve(name),   StandardCopyOption.REPLACE_EXISTING) // <base>/tessdata/eng.traineddata
         }
 
-        copy("eng.traineddata")
-        copy("vie.traineddata")
-        return base
+        copyToBoth("eng.traineddata")
+        copyToBoth("vie.traineddata")
+        return base // pass this to Tess4JOcrEngine(datapath)
     }
 }

@@ -5,12 +5,26 @@ import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.imgproc.Imgproc
 
-fun Mat.asOcrGray8(): OcrImage.Gray8 {
-    require(type() == CvType.CV_8UC1) { "Expected CV_8UC1 (gray), got ${type()}" }
-    val bytes = ByteArray(rows() * cols())
-    get(0, 0, bytes)
-    val stride = cols() // 1 byte per pixel
-    return OcrImage.Gray8(width = cols(), height = rows(), bytes = bytes, rowStride = stride)
+fun Mat.forOcrGray8(): OcrImage.Gray8 {
+    // if not already CV_8UC1, convert:
+    val g = if (type() != CvType.CV_8UC1) {
+        val tmp = Mat(); Imgproc.cvtColor(this, tmp, Imgproc.COLOR_BGR2GRAY); tmp
+    } else this
+
+    // up-scale small text to ~300dpi feel
+    val minDim = minOf(g.cols(), g.rows())
+    val scaled = if (minDim < 1600) {
+        val dst = Mat()
+        Imgproc.resize(g, dst, org.opencv.core.Size(g.cols()*1.5, g.rows()*1.5),
+            0.0, 0.0, Imgproc.INTER_CUBIC)
+        dst
+    } else g
+
+    val w = scaled.cols(); val h = scaled.rows()
+    val bytes = ByteArray(w * h)
+    scaled.get(0, 0, bytes)
+    if (scaled !== g) scaled.release()
+    return OcrImage.Gray8(w, h, bytes, w)
 }
 
 fun Mat.asOcrRgba8888(): OcrImage.Rgba8888 {
@@ -18,11 +32,10 @@ fun Mat.asOcrRgba8888(): OcrImage.Rgba8888 {
     when (channels()) {
         1 -> Imgproc.cvtColor(this, rgba, Imgproc.COLOR_GRAY2RGBA)
         3 -> Imgproc.cvtColor(this, rgba, Imgproc.COLOR_BGR2RGBA)
-        4 -> this.copyTo(rgba) // assume already RGBA
+        4 -> this.copyTo(rgba)
         else -> error("Unsupported channels: ${channels()}")
     }
-    val w = rgba.cols()
-    val h = rgba.rows()
+    val w = rgba.cols(); val h = rgba.rows()
     val bytes = ByteArray(w * h * 4)
     rgba.get(0, 0, bytes)
     rgba.release()

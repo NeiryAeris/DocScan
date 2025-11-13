@@ -3,6 +3,7 @@ package com.example.ocr.mlkit
 import android.graphics.Bitmap
 import android.graphics.Bitmap.Config
 import com.example.ocr.core.api.*
+import com.example.ocr.core.util.OcrSanitizer
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -14,25 +15,23 @@ class MlKitOcrEngine : OcrEngine {
 
     override suspend fun recognize(image: OcrImage, lang: String): OcrPageResult {
         val bmp = when (image) {
-            is OcrImage.Gray8 -> gray8ToBitmap(image)
-            is OcrImage.Rgba8888 -> rgbaToBitmap(image)
+            is OcrImage.Gray8    -> toBitmapFromGray(image)
+            is OcrImage.Rgba8888 -> toBitmapFromRgba(image)
         }
         var text = ""
         val elapsed = measureTimeMillis {
             val result = client.process(InputImage.fromBitmap(bmp, 0)).await()
             val sb = StringBuilder()
             result.textBlocks.forEach { b -> b.lines.forEach { l -> sb.appendLine(l.text) } }
-            text = sb.toString()
+            text = OcrSanitizer.sanitize(sb.toString())
         }
-        return OcrPageResult(pageNo = 0, text = text, durationMs = elapsed)
+        return OcrPageResult(pageNo = 1, text = text, durationMs = elapsed)
     }
 
-    private fun gray8ToBitmap(g: OcrImage.Gray8): Bitmap {
-        // Expand gray to ARGB for InputImage.fromBitmap
+    private fun toBitmapFromGray(g: OcrImage.Gray8): Bitmap {
         val out = Bitmap.createBitmap(g.width, g.height, Config.ARGB_8888)
         val pixels = IntArray(g.width * g.height)
-        var di = 0
-        var si = 0
+        var di = 0; var si = 0
         val w = g.width
         for (y in 0 until g.height) {
             val rowStart = si
@@ -46,12 +45,10 @@ class MlKitOcrEngine : OcrEngine {
         return out
     }
 
-    private fun rgbaToBitmap(r: OcrImage.Rgba8888): Bitmap {
+    private fun toBitmapFromRgba(r: OcrImage.Rgba8888): Bitmap {
         val out = Bitmap.createBitmap(r.width, r.height, Config.ARGB_8888)
-        // ByteArray RGBA -> Int ARGB
         val pixels = IntArray(r.width * r.height)
-        var di = 0
-        var si = 0
+        var di = 0; var si = 0
         val w = r.width
         for (y in 0 until r.height) {
             val row = si
