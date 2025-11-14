@@ -16,4 +16,6 @@ dependencies{
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.core) // ← add this
     testImplementation(libs.tess4j)
+
+    testImplementation(project(":domain"))
 }

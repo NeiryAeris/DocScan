@@ -1,5 +1,6 @@
 package com.example.ocr.core
 
+import com.example.domain.types.text.TextNormalize   // if you kept it in :domain
 import com.example.ocr.core.api.OcrImage
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
@@ -18,7 +19,7 @@ class OcrSmokeJvmTest {
     @Test
     fun enhancedImage_OCR_Tess4J() = runBlocking {
         // 1) Load enhanced sample (from test resources)
-        val imgPath = "ocr_samples/img.png"
+        val imgPath = "ocr_samples/enhanced.png"
         val bytes = resourceBytes(imgPath)
         val bi = ImageIO.read(bytes.inputStream()) ?: error("Cannot decode $imgPath")
 
@@ -27,10 +28,7 @@ class OcrSmokeJvmTest {
             if (bi.type == BufferedImage.TYPE_BYTE_GRAY) bi
             else {
                 val g = BufferedImage(bi.width, bi.height, BufferedImage.TYPE_BYTE_GRAY)
-                val gfx = g.graphics
-                gfx.drawImage(bi, 0, 0, null)
-                gfx.dispose()
-                g
+                val gfx = g.graphics; gfx.drawImage(bi, 0, 0, null); gfx.dispose(); g
             }
 
         val data = (gray.raster.dataBuffer as DataBufferByte).data
@@ -41,17 +39,18 @@ class OcrSmokeJvmTest {
             rowStride = gray.width
         )
 
-        // 3) Prepare tessdata path (copy to BOTH <base>/ and <base>/tessdata/)
-        val dataDir = prepareTessdata() // returns <base>
+        // 3) Prepare tessdata dir (copy to BOTH <base>/ and <base>/tessdata/)
+        val dataDir = prepareTessdata()
 
-        // 4) Run OCR
+        // 4) Run OCR (pure JVM via Tess4J)
         val engine = Tess4JOcrEngine(datapath = dataDir.toString())
-        val text = engine.recognize(ocrImg, "vie+eng").text
+        val raw = engine.recognize(ocrImg, "vie+eng").text
+        val clean = TextNormalize.sanitize(raw)  // or drop this if you kept it elsewhere
 
         // 5) Write output + assert
         val outDir = Paths.get("build/test-output").also { Files.createDirectories(it) }
-        write(outDir.resolve("ocr.txt"), text.toByteArray())
-        assertTrue(text.isNotBlank(), "OCR output should not be blank")
+        write(outDir.resolve("ocr.txt"), clean.toByteArray())
+        assertTrue(clean.isNotBlank(), "OCR output should not be blank")
     }
 
     private fun resourceBytes(path: String): ByteArray {
@@ -62,21 +61,12 @@ class OcrSmokeJvmTest {
     }
 
     private fun write(path: Path, data: ByteArray) {
-        Files.write(
-            path, data,
-            StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE
-        )
+        Files.write(path, data, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)
     }
 
-    /**
-     * Some Tess4J builds look for <datapath>/eng.traineddata,
-     * others for <datapath>/tessdata/eng.traineddata.
-     * To be safe, copy to BOTH places and return <datapath>=<base>.
-     */
     private fun prepareTessdata(): Path {
         val base = Files.createTempDirectory("tess4j-data")
-        val td = base.resolve("tessdata")
-        Files.createDirectories(td)
+        val td = base.resolve("tessdata"); Files.createDirectories(td)
 
         fun copyToBoth(name: String) {
             val res = "tessdata/$name"
@@ -88,6 +78,6 @@ class OcrSmokeJvmTest {
 
         copyToBoth("eng.traineddata")
         copyToBoth("vie.traineddata")
-        return base // pass this to Tess4JOcrEngine(datapath)
+        return base
     }
 }

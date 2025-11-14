@@ -23,6 +23,10 @@ android {
             )
         }
     }
+
+    sourceSets {
+        getByName("androidTest").assets.srcDirs("src/androidTest/assets")
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -44,4 +48,8 @@ dependencies {
 
     implementation(project(":ocr-core"))
     implementation(project(":domain"))
+
+    androidTestImplementation(libs.androidx.runner)
+    androidTestImplementation(libs.androidx.junit.v121)
+    androidTestImplementation(libs.kotlinx.coroutines.android)
 }
