@@ -8,8 +8,3 @@ data class OcrPageResult(
     val avgConf: Float? = null,
     val durationMs: Long? = null
 )
-data class OcrDocumentResult(
-    val pages: List<OcrPageResult>
-) {
-    val fullText: String get() = pages.joinToString("\n") { it.text }.trimEnd()
-}

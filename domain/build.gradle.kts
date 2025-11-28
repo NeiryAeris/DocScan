@@ -19,5 +19,7 @@ dependencies{
     testImplementation(libs.junit.jupiter.engine)
     testImplementation(libs.mockk) // Mocking framework for Kotlin
     testImplementation(libs.kotlin.test) // Kotlin test utilities
+
+    api(project(":ocr-core"))
 }
 

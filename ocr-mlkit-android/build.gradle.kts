@@ -14,6 +14,10 @@ android {
         consumerProguardFiles("consumer-rules.pro")
     }
 
+    sourceSets {
+        getByName("androidTest").assets.srcDirs("src/androidTest/assets")
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -44,4 +48,10 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+
+    implementation(project(":domain"))
+
+    androidTestImplementation(libs.androidx.runner)
+    androidTestImplementation(libs.androidx.junit.v121)
+    androidTestImplementation(libs.kotlinx.coroutines.android)
 }

@@ -1,49 +1,83 @@
 package com.example.ocr.core
 
+import com.example.domain.types.text.TextNormalize   // if you kept it in :domain
 import com.example.ocr.core.api.OcrImage
-import java.nio.file.*
+import kotlinx.coroutines.runBlocking
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
+import java.awt.image.BufferedImage
+import java.awt.image.DataBufferByte
 import javax.imageio.ImageIO
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertTrue
 
 class OcrSmokeJvmTest {
 
     @Test
-    fun enhancedImage_Tess4J_smoke() = kotlinx.coroutines.runBlocking {
-        // 1) load enhanced image from resources
-        val imgRes = "ocr_samples/enhanced.jpg"
-        val url = checkNotNull(javaClass.classLoader.getResource(imgRes)) { "Missing $imgRes" }
-        val bi = ImageIO.read(url) ?: error("Cannot decode $imgRes")
+    fun enhancedImage_OCR_Tess4J() = runBlocking {
+        // 1) Load enhanced sample (from test resources)
+        val imgPath = "ocr_samples/enhanced.png"
+        val bytes = resourceBytes(imgPath)
+        val bi = ImageIO.read(bytes.inputStream()) ?: error("Cannot decode $imgPath")
 
-        // 2) convert to OcrImage.Gray8 (simple)
-        val gray = if (bi.type == java.awt.image.BufferedImage.TYPE_BYTE_GRAY) bi else {
-            val g = java.awt.image.BufferedImage(bi.width, bi.height, java.awt.image.BufferedImage.TYPE_BYTE_GRAY)
-            g.graphics.drawImage(bi, 0, 0, null); g
-        }
-        val rowStride = gray.width
-        val buf = ByteArray(gray.width * gray.height)
-        for (y in 0 until gray.height) {
-            gray.raster.getDataElements(0, y, gray.width, 1, buf, y * rowStride)
-        }
-        val ocrImg: OcrImage = OcrImage.Gray8(gray.width, gray.height, buf, rowStride)
+        // 2) Ensure TYPE_BYTE_GRAY and build OcrImage.Gray8
+        val gray: BufferedImage =
+            if (bi.type == BufferedImage.TYPE_BYTE_GRAY) bi
+            else {
+                val g = BufferedImage(bi.width, bi.height, BufferedImage.TYPE_BYTE_GRAY)
+                val gfx = g.graphics; gfx.drawImage(bi, 0, 0, null); gfx.dispose(); g
+            }
 
-        // 3) prepare tessdata dir (copy from resources)
-        val base = Files.createTempDirectory("tessdata_base")
-        val td = base.resolve("tessdata"); Files.createDirectories(td)
-        fun copy(name: String) {
-            val res = "tessdata/$name"
-            val ru = checkNotNull(javaClass.classLoader.getResource(res)) { "Missing $res" }
-            Files.copy(Paths.get(ru.toURI()), td.resolve(name), StandardCopyOption.REPLACE_EXISTING)
-        }
-        copy("eng.traineddata"); copy("vie.traineddata")
+        val data = (gray.raster.dataBuffer as DataBufferByte).data
+        val ocrImg = OcrImage.Gray8(
+            width = gray.width,
+            height = gray.height,
+            bytes = data.copyOf(),
+            rowStride = gray.width
+        )
 
-        // 4) run OCR
-        val engine = Tess4JOcrEngine(datapath = base.toString())
-        val res = engine.recognize(ocrImg, "vie+eng")
-        val text = res.text
+        // 3) Prepare tessdata dir (copy to BOTH <base>/ and <base>/tessdata/)
+        val dataDir = prepareTessdata()
 
-        // 5) write output & assert
+        // 4) Run OCR (pure JVM via Tess4J)
+        val engine = Tess4JOcrEngine(datapath = dataDir.toString())
+        val raw = engine.recognize(ocrImg, "vie+eng").text
+        val clean = TextNormalize.sanitize(raw)  // or drop this if you kept it elsewhere
+
+        // 5) Write output + assert
         val outDir = Paths.get("build/test-output").also { Files.createDirectories(it) }
-        Files.write(outDir.resolve("ocr.txt"), text.toByteArray(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
-        assertTrue(text.isNotBlank(), "OCR output should not be blank")
+        write(outDir.resolve("ocr.txt"), clean.toByteArray())
+        assertTrue(clean.isNotBlank(), "OCR output should not be blank")
+    }
+
+    private fun resourceBytes(path: String): ByteArray {
+        val url = checkNotNull(javaClass.classLoader.getResource(path)) {
+            "Missing test resource: $path (put under src/test/resources/$path)"
+        }
+        return Files.readAllBytes(Paths.get(url.toURI()))
+    }
+
+    private fun write(path: Path, data: ByteArray) {
+        Files.write(path, data, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)
+    }
+
+    private fun prepareTessdata(): Path {
+        val base = Files.createTempDirectory("tess4j-data")
+        val td = base.resolve("tessdata"); Files.createDirectories(td)
+
+        fun copyToBoth(name: String) {
+            val res = "tessdata/$name"
+            val url = checkNotNull(javaClass.classLoader.getResource(res)) { "Missing $res" }
+            val src = Paths.get(url.toURI())
+            Files.copy(src, base.resolve(name), StandardCopyOption.REPLACE_EXISTING) // <base>/eng.traineddata
+            Files.copy(src, td.resolve(name),   StandardCopyOption.REPLACE_EXISTING) // <base>/tessdata/eng.traineddata
+        }
+
+        copyToBoth("eng.traineddata")
+        copyToBoth("vie.traineddata")
+        return base
     }
 }
