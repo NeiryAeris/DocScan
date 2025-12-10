@@ -14,7 +14,8 @@ import java.util.concurrent.TimeUnit
 class OcrBackendSmokeTest {
 
     // 🔧 CHANGE THIS to your NodeJS gateway endpoint
-    private val gatewayUrl = "http://localhost:4000/api/ocr/page"
+    private val gatewayUrl = "http://localhost:4000/api/pages/test-page-1/ocr"
+    private val authToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEiLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20iLCJpYXQiOjE3NjUzOTIxNzAsImV4cCI6MTc2NTk5Njk3MH0.T_9LCYFGEJhvY-xyRtTz-iLEdQ0Ww7djnITBvMO-Mhg"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -34,17 +35,19 @@ class OcrBackendSmokeTest {
         val multipart = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart(
-                "image",           // 🔧 must match field name expected by gateway
+                "pageImage",           // 👈 MUST MATCH upload.single("pageImage")
                 imageFile.name,
                 imageBody
             )
-            .addFormDataPart("lang", "vi+en") // optional, adjust if needed
-            .addFormDataPart("mode", "inline")  // or "ingest"
+            // optional metadata fields (land in req.body)
+            .addFormDataPart("pageIndex", "0")
+            .addFormDataPart("rotation", "0")
             .build()
 
         val request = Request.Builder()
             .url(gatewayUrl)
             .post(multipart)
+            .addHeader("Authorization", "Bearer $authToken") // 👈 authMiddleware
             .build()
 
         // 3) Execute HTTP call
