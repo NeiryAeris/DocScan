@@ -1,8 +1,10 @@
-package com.example.imaging_opencv_android.ocr
+package com.example.imaging_opencv_android.ocr.legacy
 
 import com.example.ocr.core.api.OcrImage
-import org.opencv.core.*
+import org.opencv.core.Mat
+import org.opencv.core.Rect
 import org.opencv.imgproc.Imgproc
+import kotlin.collections.plusAssign
 
 object LineSegmentation {
 
@@ -28,16 +30,16 @@ object LineSegmentation {
         for (y in 0 until h) {
             if (!inRun && proj[y] > minInk) { inRun = true; y0 = y }
             if (inRun && proj[y] <= minInk) {
-                rects += Rect(0, y0, w, (y - y0).coerceAtLeast(1)); inRun = false
+                rects plusAssign Rect(0, y0, w, (y - y0).coerceAtLeast(1)); inRun = false
             }
         }
-        if (inRun) rects += Rect(0, y0, w, (h - y0).coerceAtLeast(1))
+        if (inRun) rects plusAssign Rect(0, y0, w, (h - y0).coerceAtLeast(1))
 
         // Crop each rect to Gray8
         val lines = ArrayList<OcrImage.Gray8>(rects.size)
         for (r in rects) {
             val roi = Mat(gray, r)
-            lines += roi.asOcrGray8()
+            lines plusAssign roi.asOcrGray8()
             roi.release()
         }
         if (bin !== grayOrBin) bin.release()

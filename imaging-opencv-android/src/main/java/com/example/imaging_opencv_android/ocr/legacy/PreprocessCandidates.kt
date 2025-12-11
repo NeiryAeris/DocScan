@@ -1,5 +1,6 @@
-package com.example.imaging_opencv_android.ocr
+package com.example.imaging_opencv_android.ocr.legacy
 
+import com.example.imaging_opencv_android.ocr.OcrPreprocess
 import com.example.ocr.core.api.OcrImage
 import org.opencv.core.Mat
 

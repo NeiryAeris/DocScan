@@ -1,8 +1,10 @@
-package com.example.domain.types.ocr
+package com.example.domain.types.ocr.legacy
 
 import com.example.domain.types.text.TextNormalize
 import com.example.domain.types.text.TextScore
-import com.example.ocr.core.api.*
+import com.example.ocr.core.api.legacy.OcrEngine
+import com.example.ocr.core.api.OcrImage
+import com.example.ocr.core.api.OcrPageResult
 
 /** Runs OCR over multiple OcrImage candidates and returns the best text by a scorer. */
 class BestOfNRecognizer(

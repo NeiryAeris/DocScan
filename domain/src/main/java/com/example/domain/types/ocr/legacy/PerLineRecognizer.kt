@@ -1,14 +1,16 @@
-package com.example.domain.types.ocr
+package com.example.domain.types.ocr.legacy
 
 import com.example.domain.types.text.TextNormalize
-import com.example.ocr.core.api.*
+import com.example.ocr.core.api.legacy.OcrEngine
+import com.example.ocr.core.api.OcrImage
+import com.example.ocr.core.api.OcrPageResult
 
 /**
  * Concatenates OCR of pre-segmented line images (each already an OcrImage Gray8/RGBA).
  * Segmentation & cropping happen outside (e.g., imaging module).
  */
 class PerLineRecognizer(private val engine: OcrEngine) {
-    suspend fun recognizeLines( lines: List<OcrImage>, langForLine: (Int) -> String) : OcrPageResult {
+    suspend fun recognizeLines(lines: List<OcrImage>, langForLine: (Int) -> String) : OcrPageResult {
         val out = StringBuilder()
         for ((i, img) in lines.withIndex()){
             val lang = langForLine(i)
