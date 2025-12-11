@@ -11,3 +11,15 @@ kotlin {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
     }
 }
+
+dependencies {
+    // HTTP client
+    implementation(libs.okhttp)
+
+    // JSON (Moshi)
+    implementation(libs.moshi)
+    implementation(libs.moshi.kotlin)
+
+    // Coroutines for suspend functions
+    implementation(libs.kotlinx.coroutines.core.v190)
+}
