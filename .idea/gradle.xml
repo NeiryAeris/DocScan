@@ -14,9 +14,7 @@
             <option value="$PROJECT_DIR$/domain" />
             <option value="$PROJECT_DIR$/imaging-opencv-android" />
             <option value="$PROJECT_DIR$/ocr-core" />
-            <option value="$PROJECT_DIR$/ocr-mlkit-android" />
             <option value="$PROJECT_DIR$/ocr-remote" />
-            <option value="$PROJECT_DIR$/ocr-tesseract-android" />
             <option value="$PROJECT_DIR$/pipeline-core" />
           </set>
         </option>

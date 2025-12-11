@@ -2,6 +2,7 @@ package com.example.ocr.tesseract
 
 import com.example.domain.types.text.TextNormalize
 import com.example.ocr.core.api.*
+import com.example.ocr.core.api.legacy.OcrEngine
 import com.googlecode.tesseract.android.TessBaseAPI
 
 class TesseractOcrEngine(

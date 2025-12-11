@@ -45,7 +45,6 @@ dependencies {
         exclude(group = "org.openpnp", module = "opencv")
     }
     implementation(project(":ocr-core"))
-    implementation(project(":ocr-mlkit-android"))
     // Compose BOM
     implementation(platform(libs.androidx.compose.bom))
 

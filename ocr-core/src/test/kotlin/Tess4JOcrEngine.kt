@@ -2,6 +2,7 @@
 package com.example.ocr.core
 
 import com.example.ocr.core.api.*
+import com.example.ocr.core.api.legacy.OcrEngine
 import com.example.ocr.core.util.OcrSanitizer
 import net.sourceforge.tess4j.Tesseract
 import java.awt.image.BufferedImage

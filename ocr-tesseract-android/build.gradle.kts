@@ -48,6 +48,7 @@ dependencies {
 
     implementation(project(":ocr-core"))
     implementation(project(":domain"))
+    implementation(project(":imaging-opencv-android"))
 
     androidTestImplementation(libs.androidx.runner)
     androidTestImplementation(libs.androidx.junit.v121)

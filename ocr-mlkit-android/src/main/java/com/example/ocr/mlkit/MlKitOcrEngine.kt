@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Bitmap.Config
 import com.example.domain.types.text.TextNormalize
 import com.example.ocr.core.api.*
+import com.example.ocr.core.api.legacy.OcrEngine
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
