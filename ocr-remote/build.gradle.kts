@@ -13,13 +13,16 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":ocr-core"))
     // HTTP client
-    implementation(libs.okhttp)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // JSON (Moshi)
-    implementation(libs.moshi)
-    implementation(libs.moshi.kotlin)
+    implementation("com.squareup.moshi:moshi:1.15.1")
+    implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
 
     // Coroutines for suspend functions
-    implementation(libs.kotlinx.coroutines.core.v190)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+
+    testImplementation("junit:junit:4.13.2")
 }

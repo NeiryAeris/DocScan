@@ -17,6 +17,7 @@ espressoCore = "3.7.0"
 kotlinTest = "2.2.20"
 kotlinxCoroutinesCore = "1.10.2"
 kotlinxCoroutinesCoreVersion = "1.9.0"
+kotlinxCoroutinesTest = "1.9.0"
 lifecycleRuntimeKtx = "2.9.3"
 activityCompose = "1.11.0"
 composeBom = "2024.09.00"
@@ -79,6 +80,7 @@ junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", vers
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlinTest" }
 kotlinx-coroutines-core-v1102 = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutinesCore" }
 kotlinx-coroutines-core-v190 = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutinesCoreVersion" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesTest" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 moshi = { module = "com.squareup.moshi:moshi", version.ref = "moshi" }
 moshi-kotlin = { module = "com.squareup.moshi:moshi-kotlin", version.ref = "moshiKotlin" }
