@@ -44,17 +44,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.docscan.R
-import com.example.ocr.core.api.OcrRequest
-import com.example.ocr.core.api.OcrResult
-import com.example.ocr.mlkit.MlKitOcrEngine
-import com.example.ocr.mlkit.fromBitmap
+import com.example.docscan.logic.utils.NodeCloudOcrGateway
+import com.example.ocr.core.api.CloudOcrGateway
+import com.example.ocr.core.api.OcrImage
+import com.example.ocr_remote.RemoteOcrClient
+import com.example.ocr_remote.RemoteOcrClientImpl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.nio.ByteBuffer
+
+// For now, a simple constant base URL for the gateway.
+// You can later move this to BuildConfig or a config module.
+private const val DEBUG_OCR_BASE_URL = "http://10.0.2.2:4000" // emulator -> host
 
 private data class TextExtractionState(
     val sourceBitmap: Bitmap? = null,
-    val result: OcrResult? = null,
+    val recognizedText: String? = null,
     val isProcessing: Boolean = false,
     val errorMessage: String? = null,
 )
@@ -66,10 +72,24 @@ fun TextExtractionScreen(navController: NavController?) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var state by remember { mutableStateOf(TextExtractionState()) }
-    val engine = remember { MlKitOcrEngine() }
 
+    // Remote OCR client + gateway, remembered for the lifetime of this composable
+    val remoteClient: RemoteOcrClient = remember {
+        RemoteOcrClientImpl(
+            baseUrl = DEBUG_OCR_BASE_URL,
+            // TODO: wire to your real AuthManager / token provider
+            authTokenProvider = { null }
+        )
+    }
+    val cloudGateway: CloudOcrGateway = remember {
+        NodeCloudOcrGateway(remoteClient)
+    }
+
+    // No engine to close anymore, but we keep this pattern for future if needed
     DisposableEffect(Unit) {
-        onDispose { engine.close() }
+        onDispose {
+            // nothing to close for now
+        }
     }
 
     LaunchedEffect(state.errorMessage) {
@@ -87,9 +107,11 @@ fun TextExtractionScreen(navController: NavController?) {
             state = state.copy(
                 isProcessing = true,
                 errorMessage = null,
-                result = null,
+                recognizedText = null,
                 sourceBitmap = null
             )
+
+            // 1) Load bitmap from URI
             val bitmap = withContext(Dispatchers.IO) {
                 context.contentResolver.openInputStream(uri)?.use { stream ->
                     BitmapFactory.decodeStream(stream)
@@ -102,16 +124,33 @@ fun TextExtractionScreen(navController: NavController?) {
                 )
                 return@launch
             }
+
             try {
-                val request = withContext(Dispatchers.Default) {
-                    OcrRequest.fromBitmap(bitmap)
+                // 2) Convert Bitmap -> OcrImage (RGBA)
+                val ocrImage = withContext(Dispatchers.Default) {
+                    bitmap.toOcrRgba()
                 }
-                val result = withContext(Dispatchers.Default) {
-                    engine.recognize(request)
+
+                // 3) Build CloudOcrGateway.Request
+                val req = CloudOcrGateway.Request(
+                    image = ocrImage,
+                    lang = "vie+eng", // adjust to your languages
+                    hints = mapOf(
+                        "pageId" to "text-extract-${System.currentTimeMillis()}",
+                        "docId" to "local-doc",
+                        "pageIndex" to "0",
+                        "rotation" to "0"
+                    )
+                )
+
+                // 4) Call remote OCR gateway
+                val resp = withContext(Dispatchers.IO) {
+                    cloudGateway.recognize(req)
                 }
+
                 state = state.copy(
                     sourceBitmap = bitmap,
-                    result = result,
+                    recognizedText = resp.text,
                     isProcessing = false,
                     errorMessage = null
                 )
@@ -119,7 +158,8 @@ fun TextExtractionScreen(navController: NavController?) {
                 state = state.copy(
                     sourceBitmap = bitmap,
                     isProcessing = false,
-                    errorMessage = t.message ?: context.getString(R.string.text_extraction_unknown_error)
+                    errorMessage = t.message
+                        ?: context.getString(R.string.text_extraction_unknown_error)
                 )
             }
         }
@@ -132,7 +172,10 @@ fun TextExtractionScreen(navController: NavController?) {
                 navigationIcon = {
                     navController?.let {
                         IconButton(onClick = { it.popBackStack() }) {
-                            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = null)
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = null
+                            )
                         }
                     }
                 }
@@ -161,7 +204,7 @@ fun TextExtractionScreen(navController: NavController?) {
                     }
                 }
 
-                state.result != null -> {
+                state.recognizedText != null -> {
                     ExtractedContent(state)
                 }
 
@@ -175,7 +218,7 @@ fun TextExtractionScreen(navController: NavController?) {
 
                 else -> {
                     Text(
-                        "Chọn một ảnh bất kỳ để trích xuất nội dung văn bản ngay trên thiết bị.",
+                        "Chọn một ảnh bất kỳ để trích xuất nội dung văn bản (OCR backend).",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -209,8 +252,34 @@ private fun ExtractedContent(state: TextExtractionState) {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = state.result?.text.orEmpty(),
+            text = state.recognizedText.orEmpty(),
             style = MaterialTheme.typography.bodyLarge
         )
     }
+}
+
+/**
+ * Convert an ARGB_8888 Bitmap into OcrImage.Rgba8888 so NodeCloudOcrGateway
+ * can turn it into JPEG and send to your Node/Python backend.
+ */
+private fun Bitmap.toOcrRgba(): OcrImage.Rgba8888 {
+    val bmp = if (config != Bitmap.Config.ARGB_8888) {
+        copy(Bitmap.Config.ARGB_8888, false)
+    } else {
+        this
+    }
+
+    val w = bmp.width
+    val h = bmp.height
+    val bytes = ByteArray(w * h * 4)
+    val buffer = ByteBuffer.wrap(bytes)
+    bmp.copyPixelsToBuffer(buffer)
+
+    return OcrImage.Rgba8888(
+        width = w,
+        height = h,
+        bytes = bytes,
+        rowStride = w * 4,
+        premultiplied = bmp.isPremultiplied
+    )
 }

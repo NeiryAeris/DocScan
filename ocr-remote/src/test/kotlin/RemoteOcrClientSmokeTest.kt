@@ -13,7 +13,7 @@ class RemoteOcrClientSmokeTest {
     private val baseUrl = "http://localhost:4000"
 
     // 🔧 PUT YOUR REAL JWT TOKEN HERE
-    private val authToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEiLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20iLCJpYXQiOjE3NjU0OTI5ODEsImV4cCI6MTc2NjA5Nzc4MX0.AngK3zIZ2BZu263ACIN9fo8njRzWsgZhXBvqWMNPqk0"
+    private val authToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEiLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20iLCJpYXQiOjE3NjU1MzI0MTEsImV4cCI6MTc2NjEzNzIxMX0.CW9N2rTuFlpXTt3Ga1kXlcu_wrY3BAU78xvRNrHysU0"
 
     private val client = RemoteOcrClientImpl(
         baseUrl = baseUrl,
@@ -25,7 +25,7 @@ class RemoteOcrClientSmokeTest {
         // JUnit expects a void/Unit method; we just call runBlocking *inside* it
         runBlocking {
             // 1) Load sample image bytes from test resources
-            val imageBytes = loadResourceBytes("sample_ocr.png")
+            val imageBytes = loadResourceBytes("sample_ocr.jpg")
 
             // 2) Call OCR for a test page
             val pageId = "test-page-1"
