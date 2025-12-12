@@ -21,7 +21,7 @@ class NodeCloudOcrGatewaySmokeTest {
     // 🔧 CHANGE THIS depending on where Node is running
     // Emulator → PC: use 10.0.2.2
     // Physical phone → PC: use your PC's LAN IP, e.g. "http://192.168.1.10:4000"
-    private val baseUrl = "http://10.0.2.2:4000"
+    private val baseUrl = "http://192.168.1.219:4000"
 
     // 🔧 PUT YOUR REAL JWT HERE (same one that works for the :ocr-remote smoke test)
     private val authToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEiLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20iLCJpYXQiOjE3NjU1MzI0MTEsImV4cCI6MTc2NjEzNzIxMX0.CW9N2rTuFlpXTt3Ga1kXlcu_wrY3BAU78xvRNrHysU0"
