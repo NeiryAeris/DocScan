@@ -48,6 +48,14 @@ class RemoteOcrClientSmokeTest {
             println("Meta:")
             println(response.meta)
 
+            val resp = cloudGateway.recognize(req)
+
+            Log.i(TAG, "===== ANDROID OCR SMOKE TEST RESULT =====")
+            Log.i(TAG, "Text (first 300 chars): ${resp.text.take(300)}")
+            Log.i(TAG, "Words: ${resp.words.size}")
+            Log.i(TAG, "Elapsed: ${resp.elapsedMs} ms")
+            Log.i(TAG, "========================================")
+
             // JUnit-style assert to avoid generic confusion
             assertTrue("OCR text should not be blank", response.text.isNotBlank())
         }

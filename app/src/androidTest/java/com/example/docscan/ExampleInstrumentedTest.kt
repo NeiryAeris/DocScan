@@ -2,6 +2,7 @@ package com.example.docscan
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.docscan.logic.utils.NodeCloudOcrGateway
@@ -18,13 +19,14 @@ import java.nio.ByteBuffer
 @RunWith(AndroidJUnit4::class)
 class NodeCloudOcrGatewaySmokeTest {
 
-    // 🔧 CHANGE THIS depending on where Node is running
-    // Emulator → PC: use 10.0.2.2
-    // Physical phone → PC: use your PC's LAN IP, e.g. "http://192.168.1.10:4000"
-    private val baseUrl = "http://192.168.1.219:4000"
+    private val TAG = "NodeCloudOcrGatewayTest"
 
-    // 🔧 PUT YOUR REAL JWT HERE (same one that works for the :ocr-remote smoke test)
-    private val authToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEiLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20iLCJpYXQiOjE3NjU1MzI0MTEsImV4cCI6MTc2NjEzNzIxMX0.CW9N2rTuFlpXTt3Ga1kXlcu_wrY3BAU78xvRNrHysU0"
+    // Your Cloudflare / gateway URL
+    private val baseUrl = "https://charms-workshops-local-cdt.trycloudflare.com"
+
+    // Your JWT token
+    private val authToken =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEiLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20iLCJpYXQiOjE3NjU1MzI0MTEsImV4cCI6MTc2NjEzNzIxMX0.CW9N2rTuFlpXTt3Ga1kXlcu_wrY3BAU78xvRNrHysU0"
 
     private val remoteClient: RemoteOcrClient = RemoteOcrClientImpl(
         baseUrl = baseUrl,
@@ -58,18 +60,20 @@ class NodeCloudOcrGatewaySmokeTest {
             )
         )
 
-        // 4) Call gateway (will hit Node -> Python)
+        // 4) Call gateway (Node -> Python -> Tesseract)
         val resp = cloudGateway.recognize(req)
 
-        println("===== ANDROID OCR SMOKE TEST RESULT =====")
-        println("Text (first 300 chars):")
-        println(resp.text.take(300))
-        println("Words: ${resp.words.size}")
-        println("Elapsed: ${resp.elapsedMs} ms")
-        println("========================================")
+        Log.i(TAG, "===== ANDROID OCR SMOKE TEST RESULT =====")
+        Log.i(TAG, "Text (first 300 chars): ${resp.text.take(300)}")
+        Log.i(TAG, "Words: ${resp.words.size}")
+        Log.i(TAG, "Elapsed: ${resp.elapsedMs} ms")
+        Log.i(TAG, "========================================")
 
-        // 5) Basic assertion – you can relax this while backend is flaky
-        assertTrue("OCR text should not be blank", resp.text.isNotBlank())
+        // If it ever fails, show a bit of text in the assertion message
+        assertTrue(
+            "OCR text should not be blank. Got: '${resp.text.take(120)}'",
+            resp.text.isNotBlank()
+        )
     }
 
     /**
