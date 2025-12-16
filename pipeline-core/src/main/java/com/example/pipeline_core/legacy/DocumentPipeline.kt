@@ -1,4 +1,4 @@
-package com.example.pipeline_core
+package com.example.pipeline_core.legacy
 
 import org.opencv.core.*
 import org.opencv.imgproc.CLAHE

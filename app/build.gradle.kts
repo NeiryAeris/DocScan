@@ -46,6 +46,7 @@ dependencies {
     }
     implementation(project(":ocr-core"))
     implementation(project(":ocr-remote"))
+    implementation(project(":imaging-opencv-android"))
     // Compose BOM
     implementation(platform(libs.androidx.compose.bom))
 

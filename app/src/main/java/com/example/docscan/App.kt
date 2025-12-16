@@ -6,7 +6,7 @@ import org.opencv.android.OpenCVLoader
 import org.opencv.core.Core
 import com.example.docscan.logic.utils.DebugLog
 
-import com.example.pipeline_core.DocumentPipeline
+import com.example.pipeline_core.legacy.DocumentPipeline
 
 class App : Application() {
     override fun onCreate() {

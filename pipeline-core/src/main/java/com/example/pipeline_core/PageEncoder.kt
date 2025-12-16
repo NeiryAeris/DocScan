@@ -1,5 +1,6 @@
 package com.example.pipeline_core
 
+import com.example.pipeline_core.legacy.ProcessResult
 import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.MatOfByte
