@@ -30,7 +30,7 @@ class ImagePipelineSmokeTest {
         assertTrue("OpenCVLoader.initDebug() failed", OpenCVLoader.initDebug())
 
         // 1) Load a “captured” image (simulate camera output as JPEG bytes)
-        val bmp: Bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.sample_scan)
+        val bmp: Bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.raw)
             ?: error("Failed to decode R.drawable.sample_scan")
 
         val cameraJpegBytes = bmp.toJpeg(92) // simulate phone camera jpeg
