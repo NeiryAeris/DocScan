@@ -22,7 +22,7 @@ class NodeCloudOcrGatewaySmokeTest {
     private val TAG = "NodeCloudOcrGatewayTest"
 
     // Your Cloudflare / gateway URL
-    private val baseUrl = "https://charms-workshops-local-cdt.trycloudflare.com"
+    private val baseUrl = "gateway.neirylittlebox.com"
 
     // Your JWT token
     private val authToken =
