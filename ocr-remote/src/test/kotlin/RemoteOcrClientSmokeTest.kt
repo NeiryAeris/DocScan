@@ -26,7 +26,7 @@ class RemoteOcrClientSmokeTest {
     @Test
     fun remoteOcrSmokeTest() = runBlocking {
         // 1) Load sample image bytes from test resources
-        val imageBytes = loadResourceBytes("sample_ocr.png")
+        val imageBytes = loadResourceBytes("sample_ocr.jpg")
 
         // 2) Call OCR for a test page
         val pageId = "test-page-1"

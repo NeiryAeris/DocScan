@@ -22,11 +22,11 @@ class NodeCloudOcrGatewaySmokeTest {
     private val TAG = "NodeCloudOcrGatewayTest"
 
     // Your Cloudflare / gateway URL
-    private val baseUrl = "http://gateway.neirylittlebox.com"
+    private val baseUrl = "https://gateway.neirylittlebox.com"
 
     // Your JWT token
     private val authToken =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEiLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20iLCJpYXQiOjE3NjU4Nzk1ODgsImV4cCI6MTc2NjQ4NDM4OH0.pIsaPrtYnUDGekp-29HdvcxVBul11Whm-FWNMEZkWxE"
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEiLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20iLCJpYXQiOjE3NjU4OTE5MTEsImV4cCI6MTc2NjQ5NjcxMX0.5UL4rGDR3TepmMBsi0pS97MHfhutpWcjGn8v4l93Q84"
 
     private val remoteClient: RemoteOcrClient = RemoteOcrClientImpl(
         baseUrl = baseUrl,
