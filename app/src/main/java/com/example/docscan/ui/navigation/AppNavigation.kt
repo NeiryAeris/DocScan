@@ -6,9 +6,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.docscan.ui.MainScreen
+import com.example.docscan.ui.screens.TextExtractionScreen
 
 object Routes {
     const val Main = "main"
+    const val TextExtraction = "text_extraction"
 }
 
 @Composable
@@ -19,6 +21,7 @@ fun AppNavigation() {
         navController = nav,
         startDestination = Routes.Main
     ) {
-        composable(Routes.Main) { MainScreen() }
+        composable(Routes.Main) { MainScreen(nav) }
+        composable(Routes.TextExtraction) { TextExtractionScreen(nav) }
     }
 }

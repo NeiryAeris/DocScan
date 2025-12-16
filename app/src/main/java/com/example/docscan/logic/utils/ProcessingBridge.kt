@@ -1,10 +1,9 @@
 package com.example.docscan.logic.utils
 
 import android.graphics.Bitmap
-import com.example.pipeline_core.DocumentPipeline
+import com.example.pipeline_core.legacy.DocumentPipeline
 import com.example.pipeline_core.EncodedPage
 import com.example.pipeline_core.PageEncoder
-import org.opencv.core.Point
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

@@ -81,3 +81,4 @@ reports/
 .vscode/
 .cxx/
 cmake-build-*/
+/pipeline-core/build/

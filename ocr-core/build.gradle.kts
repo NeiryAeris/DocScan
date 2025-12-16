@@ -11,3 +11,11 @@ kotlin {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
     }
 }
+
+dependencies{
+    testImplementation(kotlin("test"))
+    testImplementation(libs.kotlinx.coroutines.core) // ← add this
+    testImplementation(libs.tess4j)
+
+    testImplementation(project(":domain"))
+}
