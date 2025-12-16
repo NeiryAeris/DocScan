@@ -4,7 +4,7 @@ import android.app.Application
 import android.util.Log
 import org.opencv.android.OpenCVLoader
 import org.opencv.core.Core
-import com.example.docscan.logic.utils.DebugLog
+import com.example.docscan.logic.utils.logging.DebugLog
 
 import com.example.pipeline_core.legacy.DocumentPipeline
 

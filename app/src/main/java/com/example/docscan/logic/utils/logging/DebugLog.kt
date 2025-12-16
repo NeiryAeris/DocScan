@@ -1,4 +1,4 @@
-package com.example.docscan.logic.utils
+package com.example.docscan.logic.utils.logging
 
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -8,7 +8,7 @@ import androidx.camera.core.Preview as CameraPreview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
-import com.example.docscan.logic.utils.DebugLog
+import com.example.docscan.logic.utils.logging.DebugLog
 import java.io.File
 import java.util.concurrent.Executor
 import kotlinx.coroutines.suspendCancellableCoroutine

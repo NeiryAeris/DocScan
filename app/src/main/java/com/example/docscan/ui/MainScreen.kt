@@ -24,8 +24,8 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import com.example.docscan.logic.utils.FileOps
 import com.example.docscan.logic.utils.AndroidPdfExporter
-import com.example.docscan.logic.utils.runPipelineAsync
-import com.example.docscan.logic.utils.ScanSession
+import com.example.docscan.logic.utils.runCamScanPipelineAsync
+import com.example.docscan.logic.session.ScanSession
 import com.example.docscan.ui.navigation.Routes
 import java.io.File
 
@@ -48,7 +48,7 @@ fun MainScreen(navController: NavController? = null) {
                 try {
                     isProcessing = true
                     val bmp = FileOps.loadImageFromUri(ctx, uri)
-                    val res = runPipelineAsync(bmp, mode = "color")
+                    val res = runCamScanPipelineAsync(bmp, mode = "color")
                     overlayPreview = res.overlay
                     enhancedPreview = res.enhanced
                     ScanSession.add(res.page)
@@ -69,7 +69,7 @@ fun MainScreen(navController: NavController? = null) {
             scope.launch {
                 try {
                     isProcessing = true
-                    val res = runPipelineAsync(bmp, mode = "color")
+                    val res = runCamScanPipelineAsync(bmp, mode = "color")
                     overlayPreview = res.overlay
                     enhancedPreview = res.enhanced
                     ScanSession.add(res.page)

@@ -1,4 +1,4 @@
-package com.example.docscan.logic.utils
+package com.example.docscan.logic.session
 
 import androidx.compose.runtime.mutableStateListOf
 import com.example.pipeline_core.EncodedPage

@@ -1,4 +1,4 @@
-package com.example.docscan.logic.utils
+package com.example.docscan.logic.utils.offline
 
 import java.io.File
 import java.util.*
