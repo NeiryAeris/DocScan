@@ -1,5 +1,6 @@
 package com.example.docscan.ocr_remote
 
+import com.example.ocr_remote.RemoteOcrClient
 import com.example.ocr_remote.RemoteOcrClientImpl
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
@@ -9,56 +10,46 @@ import java.io.InputStream
 
 class RemoteOcrClientSmokeTest {
 
-    // 🔧 CHANGE THIS to your gateway base URL
-    private val baseUrl = "http://localhost:4000"
+    // 👉 Deployed Node gateway base URL
+    // Try https first; if you get SSL issues, change to "http://gateway.neirylittlebox.com"
+    private val baseUrl = "https://gateway.neirylittlebox.com"
 
-    // 🔧 PUT YOUR REAL JWT TOKEN HERE
-    private val authToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEiLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20iLCJpYXQiOjE3NjU1MzI0MTEsImV4cCI6MTc2NjEzNzIxMX0.CW9N2rTuFlpXTt3Ga1kXlcu_wrY3BAU78xvRNrHysU0"
+    // 👉 JWT that your gateway accepts
+    private val authToken =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEiLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20iLCJpYXQiOjE3NjU4OTE5MTEsImV4cCI6MTc2NjQ5NjcxMX0.5UL4rGDR3TepmMBsi0pS97MHfhutpWcjGn8v4l93Q84"
 
-    private val client = RemoteOcrClientImpl(
+    private val client: RemoteOcrClient = RemoteOcrClientImpl(
         baseUrl = baseUrl,
         authTokenProvider = { authToken }
     )
 
     @Test
-    fun remoteOcrSmokeTest() {
-        // JUnit expects a void/Unit method; we just call runBlocking *inside* it
-        runBlocking {
-            // 1) Load sample image bytes from test resources
-            val imageBytes = loadResourceBytes("sample_ocr.jpg")
+    fun remoteOcrSmokeTest() = runBlocking {
+        // 1) Load sample image bytes from test resources
+        val imageBytes = loadResourceBytes("sample_ocr.png")
 
-            // 2) Call OCR for a test page
-            val pageId = "test-page-1"
-            val docId = "doc-123"
-            val pageIndex = 0
-            val rotation = 0
+        // 2) Call OCR for a test page
+        val pageId = "test-page-1"
+        val docId = "doc-123"
+        val pageIndex = 0
+        val rotation = 0
 
-            val response = client.ocrPage(
-                pageId = pageId,
-                imageBytes = imageBytes,
-                mimeType = "image/jpeg",
-                docId = docId,
-                pageIndex = pageIndex,
-                rotation = rotation
-            )
+        val response = client.ocrPage(
+            pageId = pageId,
+            imageBytes = imageBytes,
+            mimeType = "image/jpeg",
+            docId = docId,
+            pageIndex = pageIndex,
+            rotation = rotation
+        )
 
-            println("OCR text (first 300 chars):")
-            println(response.text.take(300))
+        println("OCR text (first 300 chars):")
+        println(response.text.take(300))
 
-            println("Meta:")
-            println(response.meta)
+        println("Meta:")
+        println(response.meta)
 
-            val resp = cloudGateway.recognize(req)
-
-            Log.i(TAG, "===== ANDROID OCR SMOKE TEST RESULT =====")
-            Log.i(TAG, "Text (first 300 chars): ${resp.text.take(300)}")
-            Log.i(TAG, "Words: ${resp.words.size}")
-            Log.i(TAG, "Elapsed: ${resp.elapsedMs} ms")
-            Log.i(TAG, "========================================")
-
-            // JUnit-style assert to avoid generic confusion
-            assertTrue("OCR text should not be blank", response.text.isNotBlank())
-        }
+        assertTrue("OCR text should not be blank", response.text.isNotBlank())
     }
 
     private fun loadResourceBytes(name: String): ByteArray {
