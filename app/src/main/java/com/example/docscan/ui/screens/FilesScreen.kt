@@ -8,12 +8,15 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
 import com.example.docscan.ui.components.DocumentCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FilesScreen() {
+fun FilesScreen(navController: NavHostController) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
             // Top Bar
@@ -46,4 +49,10 @@ fun FilesScreen() {
             DocumentCard(title = "CamScanner 09-10-2025 20.16", date = "09/10/2025 20:16", pageCount = 1)
         }
     }
+}
+
+@Preview(name = "FilesScreen Preview", showBackground = true)
+@Composable
+fun Preview_FilesScreen() {
+    FilesScreen(navController = rememberNavController())
 }

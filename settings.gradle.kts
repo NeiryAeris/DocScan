@@ -21,3 +21,8 @@ dependencyResolutionManagement {
 
 rootProject.name = "DocScan"
 include(":app")
+include(":pipeline-core")
+include(":domain")
+include(":imaging-opencv-android")
+include(":ocr-core")
+include(":ocr-remote")

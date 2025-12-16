@@ -14,6 +14,7 @@ import java.util.concurrent.Executor
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import androidx.camera.view.PreviewView
 
 class CameraController(private val context: Context) {
 
@@ -21,6 +22,7 @@ class CameraController(private val context: Context) {
     private var imageCapture: ImageCapture? = null
     private var preview: CameraPreview? = null
     private val mainExecutor: Executor by lazy { ContextCompat.getMainExecutor(context) }
+    private var isBound: Boolean = false
 
     suspend fun initProviderIfNeeded(): ProcessCameraProvider {
         cameraProvider?.let { return it }
@@ -67,6 +69,7 @@ class CameraController(private val context: Context) {
         )
         preview = cameraPreview
         imageCapture = capture
+        isBound = true
         DebugLog.i("Use cases bound: ${if (useBackCamera) "back" else "front"} camera")
     }
 
@@ -74,6 +77,7 @@ class CameraController(private val context: Context) {
         cameraProvider?.unbindAll()
         imageCapture = null
         preview = null
+        isBound = false
     }
 
     fun takePhoto(
@@ -95,4 +99,13 @@ class CameraController(private val context: Context) {
             }
         )
     }
+
+    // Convenience suspend helper to start camera from a PreviewView and LifecycleOwner.
+    suspend fun start(lifecycleOwner: LifecycleOwner, previewView: PreviewView, useBackCamera: Boolean = true) {
+        if (isBound) return
+        initProviderIfNeeded()
+        bindUseCases(lifecycleOwner, previewView.surfaceProvider, useBackCamera)
+    }
+
+    fun isStarted(): Boolean = isBound
 }

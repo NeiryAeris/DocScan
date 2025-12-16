@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.docscan.R // Giả sử bạn có ảnh placeholder trong drawable
+import androidx.compose.ui.tooling.preview.Preview
 
 @Composable
 fun DocumentCard(
@@ -60,4 +61,10 @@ fun DocumentCard(
             }
         }
     }
+}
+
+@Preview(name = "DocumentCard Preview", showBackground = true)
+@Composable
+fun Preview_DocumentCard() {
+    DocumentCard(title = "Sample Document", date = "10/10/2025", pageCount = 3)
 }

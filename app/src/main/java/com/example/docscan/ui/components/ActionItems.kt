@@ -11,6 +11,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Camera
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.PictureAsPdf
 
 data class ActionItemData(
     val icon: ImageVector,
@@ -108,4 +114,28 @@ fun SectionTitle(title: String, actionText: String? = null, onActionClick: (() -
             }
         }
     }
+}
+
+@Preview(name = "ActionGrid Preview", showBackground = true)
+@Composable
+fun Preview_ActionGrid() {
+    val sampleItems = listOf(
+        ActionItemData(Icons.Filled.Camera, "Scan"),
+        ActionItemData(Icons.Filled.Edit, "Edit"),
+        ActionItemData(Icons.Filled.Description, "Docs"),
+        ActionItemData(Icons.Filled.PictureAsPdf, "PDF")
+    )
+    ActionGrid(items = sampleItems, columnCount = 4)
+}
+
+@Preview(name = "ActionGridItem Preview", showBackground = true)
+@Composable
+fun Preview_ActionGridItem() {
+    ActionGridItem(ActionItemData(Icons.Filled.Camera, "Scan"))
+}
+
+@Preview(name = "SectionTitle Preview", showBackground = true)
+@Composable
+fun Preview_SectionTitle() {
+    SectionTitle(title = "Section Title", actionText = "Action") {}
 }

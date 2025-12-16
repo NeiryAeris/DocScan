@@ -40,6 +40,12 @@ android {
 }
 
 dependencies {
+    // Core module
+    implementation(project(":pipeline-core")) {
+        exclude(group = "org.openpnp", module = "opencv")
+    }
+    implementation(project(":ocr-core"))
+    implementation(project(":ocr-remote"))
     // Compose BOM
     implementation(platform(libs.androidx.compose.bom))
 
@@ -77,10 +83,13 @@ dependencies {
 
     // Unsure external dependency
     implementation(libs.core)
+    implementation(libs.coil.compose)
 
     //File ops
     implementation(libs.itextg)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.material)
     implementation(libs.androidx.material.icons.extended.android)
+    implementation(libs.kotlinx.coroutines.android)
+
 }
