@@ -18,7 +18,13 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.PictureAsPdf
 
-data class ActionItemData(val icon: ImageVector, val label: String, val onClick: () -> Unit = {})
+data class ActionItemData(
+    val icon: ImageVector,
+    val label: String,
+    val onClick: () -> Unit = {},
+    val backgroundColor: Color? = null, // Giữ nguyên
+    val iconTintColor: Color? = null   // Giữ nguyên
+)
 
 @Composable
 fun ActionGrid(items: List<ActionItemData>, columnCount: Int = 4) {
@@ -54,18 +60,43 @@ fun ActionGrid(items: List<ActionItemData>, columnCount: Int = 4) {
 
 @Composable
 fun ActionGridItem(item: ActionItemData) {
+    // Xác định màu sắc để sử dụng
+    val surfaceColor = item.backgroundColor ?: MaterialTheme.colorScheme.surfaceVariant
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
         modifier = Modifier.clickable { item.onClick() }
     ) {
-        Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(48.dp)) {
-            Icon(item.icon, contentDescription = item.label, modifier = Modifier.padding(12.dp))
+        // Áp dụng màu nền (sẽ là màu default 'surfaceVariant' nếu item.backgroundColor là null)
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = surfaceColor, // <-- Sử dụng màu nền
+            modifier = Modifier.size(48.dp)
+        ) {
+            // Áp dụng màu icon tùy chỉnh
+            val iconTint = item.iconTintColor
+            if (iconTint != null) {
+                Icon(
+                    item.icon,
+                    contentDescription = item.label,
+                    modifier = Modifier.padding(12.dp),
+                    tint = iconTint // <-- Áp dụng màu icon
+                )
+            } else {
+                Icon(
+                    item.icon,
+                    contentDescription = item.label,
+                    modifier = Modifier.padding(12.dp)
+                    // (Sử dụng màu icon mặc định 'onSurfaceVariant')
+                )
+            }
         }
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = item.label, fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 16.sp)
     }
 }
+
 
 @Composable
 fun SectionTitle(title: String, actionText: String? = null, onActionClick: (() -> Unit)? = null) {
