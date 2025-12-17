@@ -21,9 +21,9 @@ import androidx.compose.material.icons.filled.PictureAsPdf
 data class ActionItemData(
     val icon: ImageVector,
     val label: String,
-    val onClick: () -> Unit = {},
     val backgroundColor: Color? = null, // Giữ nguyên
-    val iconTintColor: Color? = null   // Giữ nguyên
+    val iconTintColor: Color? = null,   // Giữ nguyên
+    val onClick: () -> Unit = {}
 )
 
 @Composable
