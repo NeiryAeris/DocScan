@@ -21,13 +21,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import kotlinx.coroutines.launch
+import com.example.docscan.logic.scan.DraftStore
 import com.example.docscan.logic.utils.FileOps
-import com.example.docscan.logic.utils.AndroidPdfExporter
-import com.example.docscan.logic.utils.runCamScanPipelineAsync
-import com.example.docscan.logic.session.ScanSession
+import com.example.docscan.logic.utils.runCamScanAsync
 import com.example.docscan.ui.navigation.Routes
-import java.io.File
+import com.example.imaging_opencv_android.OpenCvImaging
+import kotlinx.coroutines.launch
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,6 +40,10 @@ fun MainScreen(navController: NavController? = null) {
     var overlayPreview by remember { mutableStateOf<Bitmap?>(null) }
     var enhancedPreview by remember { mutableStateOf<Bitmap?>(null) }
 
+    val draftStore = remember { DraftStore(ctx) }
+    var sessionId by remember { mutableStateOf(UUID.randomUUID().toString()) }
+    val processedPages = remember { mutableStateListOf<String>() } // absolute paths to processed JPEGs
+
     val pickImageLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -48,11 +52,17 @@ fun MainScreen(navController: NavController? = null) {
                 try {
                     isProcessing = true
                     val bmp = FileOps.loadImageFromUri(ctx, uri)
-                    val res = runCamScanPipelineAsync(bmp, mode = "color")
+
+                    val imaging = OpenCvImaging()
+                    val res = runCamScanAsync(imaging = imaging, src = bmp)
+
                     overlayPreview = res.overlay
                     enhancedPreview = res.enhanced
-                    ScanSession.add(res.page)
-                    snackbarHostState.showSnackbar("Added page #${ScanSession.count}")
+
+                    val outFile = draftStore.writeProcessedJpeg(sessionId, processedPages.size, res.outJpeg)
+                    processedPages += outFile.absolutePath
+
+                    snackbarHostState.showSnackbar("Added page #${processedPages.size}")
                 } catch (t: Throwable) {
                     snackbarHostState.showSnackbar("Import failed: ${t.message}")
                 } finally {
@@ -69,11 +79,17 @@ fun MainScreen(navController: NavController? = null) {
             scope.launch {
                 try {
                     isProcessing = true
-                    val res = runCamScanPipelineAsync(bmp, mode = "color")
+
+                    val imaging = OpenCvImaging()
+                    val res = runCamScanAsync(imaging = imaging, src = bmp)
+
                     overlayPreview = res.overlay
                     enhancedPreview = res.enhanced
-                    ScanSession.add(res.page)
-                    snackbarHostState.showSnackbar("Captured page #${ScanSession.count}")
+
+                    val outFile = draftStore.writeProcessedJpeg(sessionId, processedPages.size, res.outJpeg)
+                    processedPages += outFile.absolutePath
+
+                    snackbarHostState.showSnackbar("Captured page #${processedPages.size}")
                 } catch (t: Throwable) {
                     snackbarHostState.showSnackbar("Capture failed: ${t.message}")
                 } finally {
@@ -85,9 +101,7 @@ fun MainScreen(navController: NavController? = null) {
 
     val requestCameraPermission = rememberCameraPermissionLauncher(
         onGranted = { takePicturePreviewLauncher.launch(null) },
-        onDenied = {
-            scope.launch { snackbarHostState.showSnackbar("Camera permission denied") }
-        }
+        onDenied = { scope.launch { snackbarHostState.showSnackbar("Camera permission denied") } }
     )
 
     Scaffold(
@@ -105,7 +119,7 @@ fun MainScreen(navController: NavController? = null) {
                         Icon(imageVector = Icons.Default.TextFields, contentDescription = "Trích xuất văn bản")
                     }
                     Text(
-                        "Pages: ${ScanSession.count}",
+                        "Pages: ${processedPages.size}",
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(end = 16.dp)
                     )
@@ -116,11 +130,10 @@ fun MainScreen(navController: NavController? = null) {
         bottomBar = {
             BottomActionBar(
                 isProcessing = isProcessing,
+                pageCount = processedPages.size,
                 onImport = { pickImageLauncher.launch("image/*") },
                 onCapture = {
                     if (Build.VERSION.SDK_INT >= 33) {
-                        // On Android 13+, TakePicturePreview doesn't need explicit permission,
-                        // but we keep a unified flow for clarity.
                         takePicturePreviewLauncher.launch(null)
                     } else {
                         requestCameraPermission.launch(Manifest.permission.CAMERA)
@@ -128,23 +141,20 @@ fun MainScreen(navController: NavController? = null) {
                 },
                 onExport = {
                     scope.launch {
-                        if (ScanSession.isEmpty) {
+                        if (processedPages.isEmpty()) {
                             snackbarHostState.showSnackbar("No pages to export")
                         } else {
-                            try {
-                                val out = File(ctx.cacheDir, "scan_${System.currentTimeMillis()}.pdf")
-                                AndroidPdfExporter(ctx).export(ScanSession.snapshot(), out)
-                                snackbarHostState.showSnackbar("Exported PDF: ${out.absolutePath}")
-                                // optionally clear after export:
-                                // ScanSession.clear()
-                            } catch (t: Throwable) {
-                                snackbarHostState.showSnackbar("Export failed: ${t.message}")
-                            }
+                            val dir = draftStore.sessionDir(sessionId).absolutePath
+                            snackbarHostState.showSnackbar(
+                                "Export pending. Saved ${processedPages.size} page(s) in: $dir"
+                            )
                         }
                     }
                 },
                 onClear = {
-                    ScanSession.clear()
+                    draftStore.clearSession(sessionId)
+                    processedPages.clear()
+                    sessionId = UUID.randomUUID().toString()
                     overlayPreview = null
                     enhancedPreview = null
                     scope.launch { snackbarHostState.showSnackbar("Cleared all pages") }
@@ -156,6 +166,7 @@ fun MainScreen(navController: NavController? = null) {
             overlay = overlayPreview,
             enhanced = enhancedPreview,
             isProcessing = isProcessing,
+            pageCount = processedPages.size,
             modifier = Modifier
                 .padding(inner)
                 .fillMaxSize()
@@ -166,6 +177,7 @@ fun MainScreen(navController: NavController? = null) {
 @Composable
 private fun BottomActionBar(
     isProcessing: Boolean,
+    pageCount: Int,
     onImport: () -> Unit,
     onCapture: () -> Unit,
     onExport: () -> Unit,
@@ -189,17 +201,15 @@ private fun BottomActionBar(
                 onClick = onCapture
             ) { Text("Capture") }
 
-            Spacer(Modifier.weight(1f))
-
             OutlinedButton(
-                enabled = !isProcessing && ScanSession.count > 0,
+                enabled = !isProcessing && pageCount > 0,
                 onClick = onClear
             ) { Text("Clear") }
 
             Button(
-                enabled = !isProcessing && ScanSession.count > 0,
+                enabled = !isProcessing && pageCount > 0,
                 onClick = onExport
-            ) { Text("Export (${ScanSession.count})") }
+            ) { Text("Export ($pageCount)") }
         }
     }
 }
@@ -209,6 +219,7 @@ private fun PreviewPane(
     overlay: Bitmap?,
     enhanced: Bitmap?,
     isProcessing: Boolean,
+    pageCount: Int,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -221,55 +232,41 @@ private fun PreviewPane(
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
 
-        Text("Preview", style = MaterialTheme.typography.titleMedium)
+        if (overlay != null) {
+            Text("Overlay", style = MaterialTheme.typography.titleMedium)
+            Image(
+                bitmap = overlay.asImageBitmap(),
+                contentDescription = "Overlay",
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Text("Enhanced", style = MaterialTheme.typography.titleMedium)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 180.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 180.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                if (overlay != null) {
-                    Image(
-                        bitmap = overlay.asImageBitmap(),
-                        contentDescription = "Overlay",
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    Text("Overlay will appear here", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 180.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                if (enhanced != null) {
-                    Image(
-                        bitmap = enhanced.asImageBitmap(),
-                        contentDescription = "Enhanced",
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    Text("Enhanced will appear here", style = MaterialTheme.typography.bodyMedium)
-                }
+            if (enhanced != null) {
+                Image(
+                    bitmap = enhanced.asImageBitmap(),
+                    contentDescription = "Enhanced",
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Text("Enhanced will appear here", style = MaterialTheme.typography.bodyMedium)
             }
         }
 
         if (!isProcessing) {
-            AssistChipsRow()
+            AssistChipsRow(pageCount = pageCount)
         }
     }
 }
 
 @Composable
-private fun AssistChipsRow() {
+private fun AssistChipsRow(pageCount: Int) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -281,7 +278,7 @@ private fun AssistChipsRow() {
         )
         AssistChip(
             onClick = {},
-            label = { Text("Pages: ${ScanSession.count}") },
+            label = { Text("Pages: $pageCount") },
             enabled = false
         )
     }
