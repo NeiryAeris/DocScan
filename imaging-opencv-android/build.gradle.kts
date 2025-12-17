@@ -27,6 +27,7 @@ dependencies {
 
     // Implements :domain contracts (Imaging, ImageRef)
     implementation(project(":domain"))
+    implementation(project(":ocr-core"))
 }
 
 tasks.test {

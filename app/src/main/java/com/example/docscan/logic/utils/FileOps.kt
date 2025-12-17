@@ -79,5 +79,10 @@ class FileOps {
                 }
             }
         }
+
+        fun readBytesFromUri(context: Context, uri: Uri): ByteArray {
+            return context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                ?: error("Cannot open input stream for $uri")
+        }
     }
 }
