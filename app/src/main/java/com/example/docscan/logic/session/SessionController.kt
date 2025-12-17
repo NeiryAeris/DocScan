@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.docscan.logic.scan.DraftStore
 import com.example.docscan.logic.scan.PageSlot
 import com.example.docscan.logic.scan.ScanSessionState
+import com.example.docscan.logic.storage.DocumentFileStore
 import com.example.imaging_opencv_android.OpenCvImaging
 import com.example.pipeline_core.scan.CamScanPipeline
 import kotlinx.coroutines.CoroutineDispatcher
@@ -12,14 +13,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.UUID
-import kotlin.collections.plus
 
 class SessionController(
     private val context: Context,
     private val workDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
     private val draftStore = DraftStore(context)
+    private val docStore = DocumentFileStore(context)
 
     private val _state = MutableStateFlow(
         ScanSessionState(
@@ -84,7 +86,7 @@ class SessionController(
 
                 s.copy(
                     slots = slotsWithTail,
-                    selectedIndex = index, // optional: keep focus on page just processed
+                    selectedIndex = index, // keep focus on page just processed
                     isDirty = true
                 )
             }
@@ -100,6 +102,43 @@ class SessionController(
                 )
             }
         }
+    }
+
+    /**
+     * Commit all Ready pages (in slot order) into /Android/data/<pkg>/files/documents/<docId>/pages/
+     * Returns docId.
+     */
+    suspend fun saveSession(): String {
+        val s = _state.value
+
+        val readySlots = s.slots
+            .filterIsInstance<PageSlot.Ready>()
+            .sortedBy { it.index }
+
+        require(readySlots.isNotEmpty()) { "No scanned pages to save" }
+
+        val doc = docStore.createNewDocumentDir()
+
+        // Re-index pages sequentially in the saved document (0..N-1)
+        readySlots.forEachIndexed { pageIndex, slot ->
+            val src = File(slot.processedJpegPath)
+            require(src.exists()) { "Draft page missing: ${slot.processedJpegPath}" }
+
+            val dst = docStore.pageFile(doc.pagesDir, pageIndex)
+            src.copyTo(dst, overwrite = true)
+        }
+
+        // clear draft
+        draftStore.clearSession(s.sessionId)
+
+        // reset session
+        _state.value = ScanSessionState(
+            sessionId = UUID.randomUUID().toString(),
+            slots = listOf(PageSlot.Empty(0)),
+            selectedIndex = 0
+        )
+
+        return doc.docId
     }
 
     fun discardSession() {
