@@ -1,8 +1,10 @@
 package com.example.docscan.ui.screens
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -17,7 +19,7 @@ import androidx.navigation.compose.rememberNavController
 fun ToolsScreen(navController: NavHostController) {
     val scanActions = listOf(
         ActionItemData(Icons.Default.CreditCard, "Thẻ ID") { navController.navigate("scan") },
-        ActionItemData(Icons.Default.TextFields, "Trích xuất văn bản") { navController.navigate("text_extraction") },
+        // ActionItemData(Icons.Default.TextFields, "Trích xuất văn bản") { navController.navigate("text_extraction") }, // Removed
         ActionItemData(Icons.Default.Face, "Trình tạo ảnh ID") { navController.navigate("scan") },
         ActionItemData(Icons.Default.Functions, "Công thức") { /* TODO */ }
     )
@@ -32,15 +34,20 @@ fun ToolsScreen(navController: NavHostController) {
         ActionItemData(Icons.Default.Photo, "PDF thành ảnh") { navController.navigate("pdf_tools") }
     )
 
-    LazyColumn(modifier = Modifier.padding(bottom = 16.dp)) {
-        item { SectionTitle("Quét") }
-        item { ActionGrid(scanActions) }
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        LazyColumn(modifier = Modifier.padding(bottom = 16.dp)) {
+            item { SectionTitle("Quét") }
+            item { ActionGrid(scanActions) }
 
-        item { SectionTitle("Nhập") }
-        item { ActionGrid(importActions, columnCount = 2) }
+            item { SectionTitle("Nhập") }
+            item { ActionGrid(importActions, columnCount = 2) }
 
-        item { SectionTitle("Chuyển đổi") }
-        item { ActionGrid(convertActions) }
+            item { SectionTitle("Chuyển đổi") }
+            item { ActionGrid(convertActions) }
+        }
     }
 }
 
