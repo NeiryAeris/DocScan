@@ -58,10 +58,10 @@ class DocumentRepositorySmokeTest {
             "\n===== DOCUMENT REPO SMOKE OUTPUT =====\n" +
                     "docId: $docId\n" +
                     "docDir: ${docDir.absolutePath}\n" +
-                    "docs (top 5): ${docs.take(5).joinToString { it.docId + \"(\" + it.pageCount + \")\" }}\n" +
-                        "pages: ${pages.joinToString { it.name }}\n" +
-                                "======================================\n"
+                    "docs (top 5): ${docs.take(5).joinToString { "${it.docId}(${it.pageCount})" }}\n" +
+                    "pages: ${pages.joinToString { it.name }}\n" +
+                    "======================================\n"
 
-                        println(msg)
+        println(msg)
     }
 }
