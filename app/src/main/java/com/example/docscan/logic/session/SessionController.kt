@@ -39,7 +39,7 @@ class SessionController(
         }
     }
 
-    suspend fun processIntoSlot(index: Int, cameraJpeg: ByteArray) {
+    suspend fun processIntoSlot(index: Int, cameraJpeg: ByteArray, enhanceMode: String) {
         val sessionId = _state.value.sessionId
 
         _state.update { s ->
@@ -58,7 +58,7 @@ class SessionController(
                 pipeline.processJpeg(
                     cameraJpeg = cameraJpeg,
                     options = CamScanPipeline.Options(
-                        enhanceMode = "auto_pro",
+                        enhanceMode = enhanceMode,
                         jpegQuality = 85,
                         includeOverlay = false
                     )

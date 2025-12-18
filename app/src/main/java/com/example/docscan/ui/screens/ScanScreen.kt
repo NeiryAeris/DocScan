@@ -15,10 +15,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Camera
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -54,7 +51,6 @@ fun ScanScreen(navController: NavController) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
 
-    // Camera & Permissions
     val cameraController = remember { CameraController(context) }
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -70,11 +66,10 @@ fun ScanScreen(navController: NavController) {
         if (!hasCameraPermission) permissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
-    // Session Logic
     val sessionController = remember { SessionController(context) }
     val sessionState by sessionController.state.collectAsState()
+    var enhanceMode by remember { mutableStateOf("color-pro") } // color-pro, auto-pro
 
-    // Helper: capture & process
     fun captureAndProcess() {
         val targetSlot = sessionState.slots.firstOrNull { it is PageSlot.Empty }
             ?: return
@@ -85,7 +80,7 @@ fun ScanScreen(navController: NavController) {
             onSaved = { file ->
                 scope.launch {
                     val bytes = file.readBytes()
-                    sessionController.processIntoSlot(targetSlot.index, bytes)
+                    sessionController.processIntoSlot(targetSlot.index, bytes, enhanceMode)
                     file.delete()
                 }
             },
@@ -96,7 +91,6 @@ fun ScanScreen(navController: NavController) {
         )
     }
 
-    // Helper: Finish and export
     fun finishAndExport() = scope.launch {
         val readySlots = sessionState.slots.filterIsInstance<PageSlot.Ready>()
         if (readySlots.isEmpty()) {
@@ -110,9 +104,7 @@ fun ScanScreen(navController: NavController) {
             val pagesToExport = withContext(Dispatchers.IO) {
                 readySlots.map {
                     val jpegBytes = File(it.processedJpegPath).readBytes()
-                    // Note: PdfExporter expects PNG, but let's see if it handles JPEG gracefully.
-                    // If not, we might need to decode->re-encode.
-                    EncodedPage(png = jpegBytes, width = 0, height = 0) // Width/Height are not used by our exporter
+                    EncodedPage(png = jpegBytes, width = 0, height = 0)
                 }
             }
 
@@ -130,7 +122,7 @@ fun ScanScreen(navController: NavController) {
             }
 
             Toast.makeText(context, "Saved to ${outFile.name}", Toast.LENGTH_LONG).show()
-            sessionController.discardSession() // Clear draft files
+            sessionController.discardSession()
             navController.popBackStack()
 
         } catch (e: Exception) {
@@ -159,34 +151,77 @@ fun ScanScreen(navController: NavController) {
         },
         bottomBar = {
             Surface(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                modifier = Modifier.fillMaxWidth().height(180.dp)
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                    modifier = Modifier.padding(vertical = 16.dp)
                 ) {
                     LazyRow(
-                        modifier = Modifier.fillMaxWidth().padding(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                         contentPadding = PaddingValues(horizontal = 16.dp)
                     ) {
                         items(sessionState.slots) { slot ->
                             SlotItemView(slot)
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clip(CircleShape)
-                            .background(if (hasCameraPermission) MaterialTheme.colorScheme.primary else Color.Gray)
-                            .clickable(enabled = hasCameraPermission, onClick = { captureAndProcess() })
-                    ) {
-                        Icon(Icons.Default.Camera, "Chụp", tint = Color.White, modifier = Modifier.size(40.dp))
-                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        var showModeMenu by remember { mutableStateOf(false) }
+                        Box {
+                            OutlinedButton(
+                                onClick = { showModeMenu = true },
+                                shape = CircleShape,
+                                modifier = Modifier.size(64.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                val icon = if (enhanceMode == "color-pro") Icons.Default.ColorLens else Icons.Default.FilterBAndW
+                                Icon(icon, contentDescription = "Change scan mode")
+                            }
+                            DropdownMenu(
+                                expanded = showModeMenu,
+                                onDismissRequest = { showModeMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Quét màu") },
+                                    onClick = {
+                                        enhanceMode = "color-pro"
+                                        showModeMenu = false
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.ColorLens, null) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Quét đen trắng") },
+                                    onClick = {
+                                        enhanceMode = "auto-pro"
+                                        showModeMenu = false
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.FilterBAndW, null) }
+                                )
+                            }
+                        }
+
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(80.dp)
+                                .clip(CircleShape)
+                                .background(if (hasCameraPermission) MaterialTheme.colorScheme.primary else Color.Gray)
+                                .clickable(enabled = hasCameraPermission, onClick = { captureAndProcess() })
+                        ) {
+                            Icon(Icons.Default.Camera, "Chụp", tint = Color.White, modifier = Modifier.size(40.dp))
+                        }
+
+                        Spacer(modifier = Modifier.size(64.dp))
+                    }
                 }
             }
         }

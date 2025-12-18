@@ -1,54 +1,57 @@
 package com.example.docscan.logic.storage
 
-import android.content.Context
-import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
-class DocumentRepository(private val context: Context) {
+/**
+ * A singleton repository to hold and manage the global list of documents.
+ * This ensures data is loaded only once and is instantly available across all screens.
+ */
+object DocumentRepository {
+    private val _documents = MutableStateFlow<List<DocumentFile>>(emptyList())
+    val documents = _documents.asStateFlow()
 
-    data class DocSummary(
-        val docId: String,
-        val docDir: File,
-        val pagesDir: File,
-        val pageCount: Int,
-        val coverPage: File? // first page jpg if any
-    )
+    // Use a custom scope to ensure repository operations don't get cancelled with screen-level scopes.
+    private val repositoryScope = CoroutineScope(Dispatchers.Main)
 
-    private fun documentsRoot(): File =
-        File(context.getExternalFilesDir(null), "documents").apply { mkdirs() }
-
-    fun listDocumentsNewestFirst(): List<DocSummary> {
-        val root = documentsRoot()
-        val docDirs = root.listFiles { f -> f.isDirectory }?.toList().orEmpty()
-
-        return docDirs
-            .sortedByDescending { it.lastModified() }
-            .mapNotNull { docDir ->
-                val docId = docDir.name
-                val pagesDir = File(docDir, "pages")
-                val pages = pagesDir.listFiles { f ->
-                    f.isFile && (f.name.endsWith(".jpg", true) || f.name.endsWith(".jpeg", true))
-                }?.sortedBy { it.name }.orEmpty()
-
-                DocSummary(
-                    docId = docId,
-                    docDir = docDir,
-                    pagesDir = pagesDir,
-                    pageCount = pages.size,
-                    coverPage = pages.firstOrNull()
-                )
-            }
+    init {
+        // Initial load when the repository is first created.
+        refresh()
     }
 
-    fun listPages(docId: String): List<File> {
-        val pagesDir = File(documentsRoot(), "$docId/pages")
-        val pages = pagesDir.listFiles { f ->
-            f.isFile && (f.name.endsWith(".jpg", true) || f.name.endsWith(".jpeg", true))
-        }?.sortedBy { it.name }.orEmpty()
-        return pages
+    /**
+     * Refreshes the document list from storage off the main thread.
+     * This is a non-blocking call that updates the flow when complete.
+     */
+    fun refresh() {
+        repositoryScope.launch(Dispatchers.IO) {
+            val updatedDocs = AppStorage.listPdfDocuments()
+            _documents.value = updatedDocs
+        }
     }
 
-    fun deleteDocument(docId: String): Boolean {
-        val dir = File(documentsRoot(), docId)
-        return dir.exists() && dir.deleteRecursively()
+    /**
+     * Deletes a document and refreshes the list.
+     */
+    suspend fun deleteDocument(doc: DocumentFile): Boolean {
+        val success = AppStorage.deleteDocument(doc)
+        if (success) {
+            refresh() // Trigger a refresh
+        }
+        return success
+    }
+
+    /**
+     * Renames a document and refreshes the list.
+     */
+    suspend fun renameDocument(doc: DocumentFile, newName: String): Boolean {
+        val success = AppStorage.renameDocument(doc, newName)
+        if (success) {
+            refresh() // Trigger a refresh
+        }
+        return success
     }
 }

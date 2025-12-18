@@ -1,6 +1,8 @@
 package com.example.docscan.logic.storage
 
 import android.os.Environment
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -25,13 +27,13 @@ object AppStorage {
      * This will be a folder named "DocscanFile" in the public Documents directory.
      * It will be created if it doesn't exist.
      */
-    fun getPublicAppDir(): File? {
+    suspend fun getPublicAppDir(): File? = withContext(Dispatchers.IO) {
         val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
         if (documentsDir == null || (!documentsDir.exists() && !documentsDir.mkdirs())) {
-            return null
+            return@withContext null
         }
         val appDir = File(documentsDir, ROOT_DIR_NAME)
-        return try {
+        try {
             if (!appDir.exists()) {
                 if (appDir.mkdirs()) appDir else null
             } else {
@@ -48,24 +50,56 @@ object AppStorage {
      *
      * @return A list of [DocumentFile] objects.
      */
-    fun listPdfDocuments(): List<DocumentFile> {
-        val appDir = getPublicAppDir() ?: return emptyList()
+    suspend fun listPdfDocuments(): List<DocumentFile> = withContext(Dispatchers.IO) {
+        val appDir = getPublicAppDir() ?: return@withContext emptyList()
 
         val pdfs = appDir.listFiles { _, name -> name.lowercase(Locale.ROOT).endsWith(".pdf") }
-            ?: return emptyList()
+            ?: return@withContext emptyList()
 
         // Sort by last modified date, newest first
         pdfs.sortByDescending { it.lastModified() }
 
         val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
 
-        return pdfs.map {
+        pdfs.map {
             DocumentFile(
                 file = it,
                 name = it.nameWithoutExtension,
                 formattedDate = dateFormat.format(Date(it.lastModified())),
                 pageCount = 1 // TODO: Implement actual PDF page count extraction if needed
             )
+        }
+    }
+
+    /**
+     * Deletes a document file.
+     *
+     * @param documentFile The document to delete.
+     * @return True if the file was deleted, false otherwise.
+     */
+    suspend fun deleteDocument(documentFile: DocumentFile): Boolean = withContext(Dispatchers.IO) {
+        try {
+            documentFile.file.delete()
+        } catch (e: SecurityException) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
+     * Renames a document file.
+     *
+     * @param documentFile The document to rename.
+     * @param newName The new name for the document (without extension).
+     * @return True if the file was renamed, false otherwise.
+     */
+    suspend fun renameDocument(documentFile: DocumentFile, newName: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val newFile = File(documentFile.file.parent, "$newName.pdf")
+            documentFile.file.renameTo(newFile)
+        } catch (e: SecurityException) {
+            e.printStackTrace()
+            false
         }
     }
 }

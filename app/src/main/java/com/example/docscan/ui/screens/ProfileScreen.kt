@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -19,6 +20,17 @@ import androidx.navigation.compose.rememberNavController
 
 @Composable
 fun ProfileScreen(navController: NavHostController) {
+
+    // Remember navigation actions to make them stable
+    val navigateToProfile = remember { { navController.navigate("profile") } }
+    val navigateToBenefits = remember { { /*TODO*/ } }
+    val navigateToSync = remember { { /*TODO*/ } }
+    val navigateToSettings = remember { { /*TODO*/ } }
+    val openBalance = remember { { /* maybe open balance */ } }
+    val openCloud = remember { { } }
+    val openTasks = remember { { } }
+    val upgradeNow = remember { { /*TODO*/ } }
+
     LazyColumn {
         item {
             // Upgrade section
@@ -32,7 +44,7 @@ fun ProfileScreen(navController: NavHostController) {
                     Text("Nâng cấp tài khoản của tôi", style = MaterialTheme.typography.titleMedium)
                     Text("Mở khóa 20+ đặc quyền Premium", style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = { /*TODO*/ }, modifier = Modifier.align(Alignment.End)) {
+                    Button(onClick = upgradeNow, modifier = Modifier.align(Alignment.End)) {
                         Text("Nâng cấp ngay")
                     }
                 }
@@ -40,15 +52,15 @@ fun ProfileScreen(navController: NavHostController) {
         }
 
         // Profile options
-        item { ProfileItem(icon = Icons.Default.Cloud, title = "Đám mây") { navController.navigate("scan") } }
-        item { ProfileItem(icon = Icons.Default.CheckCircle, title = "Nhiệm vụ") { navController.navigate("scan") } }
-        item { ProfileItem(icon = Icons.Default.MonetizationOn, title = "Số dư điểm C", "0 điểm") { /* maybe open balance */ } }
+        item { ProfileItem(icon = Icons.Default.Cloud, title = "Đám mây", onClick = openCloud) }
+        item { ProfileItem(icon = Icons.Default.CheckCircle, title = "Nhiệm vụ", onClick = openTasks) }
+        item { ProfileItem(icon = Icons.Default.MonetizationOn, title = "Số dư điểm C", subtitle = "0 điểm", onClick = openBalance) }
         item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp)) }
-        item { ProfileItem(icon = Icons.Default.AccountCircle, title = "Tài khoản") { navController.navigate("profile") } }
-        item { ProfileItem(icon = Icons.Default.CardGiftcard, title = "Lợi ích EDU", "Premium miễn phí") { /*TODO*/ } }
-        item { ProfileItem(icon = Icons.Default.Sync, title = "Đồng bộ") { /*TODO*/ } }
+        item { ProfileItem(icon = Icons.Default.AccountCircle, title = "Tài khoản", onClick = navigateToProfile) }
+        item { ProfileItem(icon = Icons.Default.CardGiftcard, title = "Lợi ích EDU", subtitle = "Premium miễn phí", onClick = navigateToBenefits) }
+        item { ProfileItem(icon = Icons.Default.Sync, title = "Đồng bộ", onClick = navigateToSync) }
         item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp)) }
-        item { ProfileItem(icon = Icons.Default.Settings, title = "Cài đặt khác") { /*TODO*/ } }
+        item { ProfileItem(icon = Icons.Default.Settings, title = "Cài đặt khác", onClick = navigateToSettings) }
     }
 }
 
@@ -57,7 +69,7 @@ fun ProfileItem(icon: ImageVector, title: String, subtitle: String? = null, onCl
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
