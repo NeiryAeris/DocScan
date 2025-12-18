@@ -15,8 +15,8 @@ interface OcrGateway {
      * Returns both the page result (words/conf if provided by engine) and the normalized text bundle.
      */
     suspend fun recognize(
-        docId: Long,
-        pageId: Long,
+        docId: String,
+        pageId: String,
         image: OcrImage,
         policy: OcrPolicy = OcrPolicy()
     ): Result
