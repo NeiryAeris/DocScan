@@ -31,6 +31,7 @@ fun DocumentCard(
     onLongClick: () -> Unit = {},
     onDeleteClick: () -> Unit = {},
     onRenameClick: (String) -> Unit = {},
+    onPdfToImageClick: () -> Unit = {},
     isSelected: Boolean = false,
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -93,6 +94,13 @@ fun DocumentCard(
                         onClick = {
                             showMenu = false
                             showRenameDialog = true
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("PDF sang ảnh") },
+                        onClick = {
+                            showMenu = false
+                            onPdfToImageClick()
                         }
                     )
                     DropdownMenuItem(

@@ -1,5 +1,9 @@
 package com.example.docscan.logic.storage
 
+import android.content.Context
+import android.net.Uri
+import android.widget.Toast
+import androidx.core.net.toUri
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,5 +57,27 @@ object DocumentRepository {
             refresh() // Trigger a refresh
         }
         return success
+    }
+
+    /**
+     * Creates a new PDF file from a list of image URIs and refreshes the document list.
+     */
+    suspend fun createPdfFromImages(context: Context, imageUris: List<Uri>): Uri? {
+        val pdfFile = AppStorage.createPdfFromImages(context, imageUris)
+        return if (pdfFile != null) {
+            refresh()
+            pdfFile.toUri()
+        } else {
+            null
+        }
+    }
+
+    suspend fun convertPdfToImages(context: Context, doc: DocumentFile) {
+        val success = AppStorage.convertPdfToImages(context, doc)
+        if (success) {
+            Toast.makeText(context, "Đã chuyển đổi thành công sang hình ảnh", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Lỗi khi chuyển đổi PDF sang hình ảnh", Toast.LENGTH_SHORT).show()
+        }
     }
 }
