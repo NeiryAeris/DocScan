@@ -1,9 +1,14 @@
 package com.example.docscan.ui.screens
 
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -11,7 +16,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.example.docscan.logic.storage.DocumentRepository
 import com.example.docscan.logic.utils.FileOpener
 import com.example.docscan.ui.components.ActionGrid
@@ -22,16 +32,62 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onScanClick: () -> Unit = {}, onShowAllClick: () -> Unit = {}) {
+fun HomeScreen(
+    onScanClick: () -> Unit = {},
+    onShowAllClick: () -> Unit = {},
+    onImageImport: (Uri) -> Unit,
+    onDocumentImport: (Uri) -> Unit
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? ->
+            uri?.let { onImageImport(it) }
+        }
+    )
+
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? ->
+            uri?.let { onDocumentImport(it) }
+        }
+    )
+
+    var searchQuery by remember { mutableStateOf("") }
+    var committedSearchQuery by remember { mutableStateOf("") }
 
     // Get documents directly from the repository. The data is pre-loaded and instantly available.
     val documents by DocumentRepository.documents.collectAsState()
 
-    // Use derivedStateOf to get recent documents. This recalculates only when the source state changes.
-    val recentDocuments by remember(documents) {
-        derivedStateOf { documents.take(3) }
+    // Refresh documents when the screen is resumed
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                scope.launch {
+                    DocumentRepository.refresh()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // Filter documents based on the committed search query. If the query is empty, show the 3 most recent documents.
+    val documentsToDisplay by remember(documents, committedSearchQuery) {
+        derivedStateOf {
+            if (committedSearchQuery.isBlank()) {
+                documents.take(3)
+            } else {
+                documents.filter { it.name.contains(committedSearchQuery, ignoreCase = true) }
+            }
+        }
     }
 
     // Use remember to avoid recreating the action list on every recomposition
@@ -39,12 +95,10 @@ fun HomeScreen(onScanClick: () -> Unit = {}, onShowAllClick: () -> Unit = {}) {
         listOf(
             ActionItemData(Icons.Default.Scanner, "Quét", onClick = onScanClick),
             ActionItemData(Icons.Default.PictureAsPdf, "Công cụ PDF", onClick = {}),
-            ActionItemData(Icons.Default.Image, "Nhập ảnh", onClick = {}),
-            ActionItemData(Icons.Default.UploadFile, "Nhập tập tin", onClick = {}),
+            ActionItemData(Icons.Default.Image, "Nhập ảnh", onClick = { imagePickerLauncher.launch("image/*") }),
+            ActionItemData(Icons.Default.UploadFile, "Nhập tập tin", onClick = { documentPickerLauncher.launch("application/pdf") }),
             ActionItemData(Icons.Default.CreditCard, "Thẻ ID", onClick = {}),
-            ActionItemData(Icons.Default.TextFields, "Trích xuất văn bản", onClick = {}),
-            ActionItemData(Icons.Default.AutoAwesome, "Solver AI", onClick = {}),
-            ActionItemData(Icons.Default.MoreHoriz, "Tất cả", onClick = {})
+            ActionItemData(Icons.Default.TextFields, "Trích xuất văn bản", onClick = {})
         )
     }
 
@@ -55,13 +109,21 @@ fun HomeScreen(onScanClick: () -> Unit = {}, onShowAllClick: () -> Unit = {}) {
         LazyColumn {
             item {
                 OutlinedTextField(
-                    value = "",
-                    onValueChange = {},
-                    label = { Text("Tìm kiếm") },
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Tìm kiếm tài liệu") },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
+                        .padding(16.dp),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = {
+                            committedSearchQuery = searchQuery
+                            keyboardController?.hide()
+                        }
+                    )
                 )
             }
             item {
@@ -71,7 +133,7 @@ fun HomeScreen(onScanClick: () -> Unit = {}, onShowAllClick: () -> Unit = {}) {
                 SectionTitle(title = "Gần đây", actionText = "Xem tất cả", onActionClick = onShowAllClick)
             }
 
-            if (recentDocuments.isEmpty()) {
+            if (documentsToDisplay.isEmpty()) {
                 item {
                     Box(
                         modifier = Modifier
@@ -79,11 +141,16 @@ fun HomeScreen(onScanClick: () -> Unit = {}, onShowAllClick: () -> Unit = {}) {
                             .padding(vertical = 40.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("Chưa có tài liệu gần đây")
+                        val message = if (committedSearchQuery.isBlank()) {
+                            "Chưa có tài liệu gần đây"
+                        } else {
+                            "Không tìm thấy tài liệu nào"
+                        }
+                        Text(message)
                     }
                 }
             } else {
-                items(recentDocuments, key = { it.file.absolutePath }) { doc ->
+                items(documentsToDisplay, key = { it.file.absolutePath }) { doc ->
                     DocumentCard(
                         title = doc.name,
                         date = doc.formattedDate,
