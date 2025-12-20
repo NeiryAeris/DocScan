@@ -9,9 +9,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.net.toUri
@@ -22,32 +21,18 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import com.example.docscan.logic.ocr.OcrGatewayImpl
+import com.example.docscan.App
+import com.example.docscan.logic.storage.DocumentFile
 import com.example.docscan.logic.storage.DocumentRepository
-import com.example.docscan.logic.utils.NodeCloudOcrGateway
 import com.example.docscan.ui.BottomNavItem
 import com.example.docscan.ui.screens.*
-import com.example.ocr.core.api.AuthTokenProvider
-import com.example.ocr_remote.RemoteOcrClientImpl
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 @Composable
 fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifier) {
-    // Create an instance of the OCR gateway. In a real app, you'd use a DI framework like Hilt.
-    val ocrGateway = remember {
-        val baseUrl = "https://gateway.neirylittlebox.com"
-        val authToken =
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEiLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20iLCJpYXQiOjE3NjU4OTE5MTEsImV4cCI6MTc2NjQ5NjcxMX0.5UL4rGDR3TepmMBsi0pS97MHfhutpWcjGn8v4l93Q84"
-
-        val remoteClient = RemoteOcrClientImpl(
-            baseUrl = baseUrl,
-            authTokenProvider = { authToken }
-        )
-        val cloudGateway = NodeCloudOcrGateway(remoteClient)
-        OcrGatewayImpl(cloudGateway)
-    }
+    val ocrGateway = App.ocrGateway
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -72,11 +57,11 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
                     },
                     onImageImport = {
                         val encodedUri = URLEncoder.encode(it.toString(), StandardCharsets.UTF_8.toString())
-                        navController.navigate("scan?imageUri=$encodedUri")
+                        navController.navigate("scan?imageUri=${'$'}encodedUri")
                     },
                     onDocumentImport = {
                         val encodedUri = URLEncoder.encode(it.toString(), StandardCharsets.UTF_8.toString())
-                        navController.navigate("scan?pdfUri=$encodedUri")
+                        navController.navigate("scan?pdfUri=${'$'}encodedUri")
                     },
                     ocrGateway = ocrGateway // Pass the gateway to the HomeScreen
                 )
@@ -108,7 +93,7 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
                     onScanComplete = { uri ->
                         val encodedUri = URLEncoder.encode(uri.toString(), StandardCharsets.UTF_8.toString())
                         // Navigate to ScanScreen with the new PDF, and remove IdCardScanScreen from the back stack
-                        navController.navigate("scan?pdfUri=$encodedUri") {
+                        navController.navigate("scan?pdfUri=${'$'}encodedUri") {
                             popUpTo("id_card_scan") { inclusive = true }
                         }
                     }
@@ -122,13 +107,29 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
                 route = "pdf_to_image/{documentUri}",
                 arguments = listOf(navArgument("documentUri") { type = NavType.StringType })
             ) { backStackEntry ->
-                val documents by DocumentRepository.documents.collectAsState()
-                val document = backStackEntry.arguments?.getString("documentUri")?.let { uriString ->
-                    val decodedUri = URLDecoder.decode(uriString, StandardCharsets.UTF_8.name())
-                    val documentUri = Uri.parse(decodedUri)
-                    documents.find { it.file.toUri() == documentUri }
+                val documentUriString = backStackEntry.arguments?.getString("documentUri")
+                val document by produceState<DocumentFile?>(initialValue = null, documentUriString) {
+                    value = documentUriString?.let { uriString ->
+                        val decodedUri = URLDecoder.decode(uriString, StandardCharsets.UTF_8.name())
+                        val documentUri = Uri.parse(decodedUri)
+                        DocumentRepository.findDocumentByUri(documentUri)
+                    }
                 }
-                PdfToImageScreen(navController, document)
+
+                if (document != null) {
+                    PdfToImageScreen(navController, document)
+                }
+            }
+
+            composable(
+                route = "pdf_to_word/{pdfUri}",
+                arguments = listOf(navArgument("pdfUri") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val pdfUriString = backStackEntry.arguments?.getString("pdfUri")
+                if (pdfUriString != null) {
+                    val decodedUri = URLDecoder.decode(pdfUriString, StandardCharsets.UTF_8.name())
+                    PdfToWordScreen(navController, Uri.parse(decodedUri))
+                }
             }
         }
     }
@@ -139,7 +140,7 @@ fun PlaceholderScreen(name: String, navController: NavController) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Placeholder: $name")
+                Text("Placeholder: ${'$'}name")
                 Button(onClick = { navController.popBackStack() }) {
                     Text("Quay lại")
                 }

@@ -23,9 +23,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.docscan.logic.storage.DocumentRepository
 import com.example.docscan.logic.utils.FileOpener
 import com.example.docscan.ui.components.ActionGrid
@@ -34,8 +31,10 @@ import com.example.docscan.ui.components.DocumentCard
 import com.example.docscan.ui.components.SectionTitle
 import com.example.domain.interfaces.ocr.OcrGateway
 import com.example.ocr.core.api.OcrImage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import android.graphics.Bitmap
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,63 +49,56 @@ fun HomeScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
-    val lifecycleOwner = LocalLifecycleOwner.current
 
     var extractedText by remember { mutableStateOf<String?>(null) }
     var isOcrLoading by remember { mutableStateOf(false) }
 
-
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent(),
-        onResult = { uri: Uri? ->
-            uri?.let { onImageImport(it) }
+    val onImageResult = remember(onImageImport) {
+        { uri: Uri? ->
+            if (uri != null) {
+                onImageImport(uri)
+            }
         }
-    )
-
-    val documentPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent(),
-        onResult = { uri: Uri? ->
-            uri?.let { onDocumentImport(it) }
+    }
+    val onDocumentResult = remember(onDocumentImport) {
+        { uri: Uri? ->
+            if (uri != null) {
+                onDocumentImport(uri)
+            }
         }
-    )
+    }
 
-    val ocrImagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent(),
-        onResult = { uri: Uri? ->
-            uri?.let {
+    val onOcrImageResult = remember(context, scope, ocrGateway) {
+        { uri: Uri? ->
+            if (uri != null) {
                 scope.launch {
                     isOcrLoading = true
                     try {
-                        // 1. Get Bitmap from Uri
-                        val originalBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                            ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, it))
-                        } else {
-                            @Suppress("DEPRECATION")
-                            MediaStore.Images.Media.getBitmap(context.contentResolver, it)
+                        val result = withContext(Dispatchers.IO) {
+                            val originalBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri))
+                            } else {
+                                @Suppress("DEPRECATION")
+                                MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                            }
+                            val bitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                            val buffer = java.nio.ByteBuffer.allocate(bitmap.byteCount)
+                            bitmap.copyPixelsToBuffer(buffer)
+
+                            val ocrImage = OcrImage.Rgba8888(
+                                bytes = buffer.array(),
+                                width = bitmap.width,
+                                height = bitmap.height,
+                                rowStride = bitmap.rowBytes
+                            )
+
+                            ocrGateway.recognize(
+                                docId = "transient-doc-${System.currentTimeMillis()}",
+                                pageId = "transient-page-${System.currentTimeMillis()}",
+                                image = ocrImage
+                            )
                         }
 
-                        // Ensure the bitmap is mutable and in a software-readable format (ARGB_8888)
-                        val bitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, false)
-
-                        // 2. Convert Bitmap to OcrImage
-                        val buffer = java.nio.ByteBuffer.allocate(bitmap.byteCount)
-                        bitmap.copyPixelsToBuffer(buffer)
-
-                        val ocrImage = OcrImage.Rgba8888(
-                            bytes = buffer.array(),
-                            width = bitmap.width,
-                            height = bitmap.height,
-                            rowStride = bitmap.rowBytes
-                        )
-
-                        // 3. Call OCR gateway
-                        val result = ocrGateway.recognize(
-                            docId = "transient-doc-${System.currentTimeMillis()}",
-                            pageId = "transient-page-${System.currentTimeMillis()}",
-                            image = ocrImage
-                        )
-
-                        // 4. Show result
                         extractedText = if (result.text.raw.isNotBlank()) {
                             result.text.raw
                         } else {
@@ -121,31 +113,17 @@ fun HomeScreen(
                 }
             }
         }
-    )
+    }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent(), onImageResult)
+    val documentPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent(), onDocumentResult)
+    val ocrImagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent(), onOcrImageResult)
 
     var searchQuery by remember { mutableStateOf("") }
     var committedSearchQuery by remember { mutableStateOf("") }
 
-    // Get documents directly from the repository. The data is pre-loaded and instantly available.
     val documents by DocumentRepository.documents.collectAsState()
 
-    // Refresh documents when the screen is resumed
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                scope.launch {
-                    DocumentRepository.refresh()
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    // Filter documents based on the committed search query. If the query is empty, show the 3 most recent documents.
     val documentsToDisplay by remember(documents, committedSearchQuery) {
         derivedStateOf {
             if (committedSearchQuery.isBlank()) {
@@ -156,8 +134,7 @@ fun HomeScreen(
         }
     }
 
-    // Use remember to avoid recreating the action list on every recomposition
-    val homeActions = remember {
+    val homeActions = remember(onScanClick, onIdCardScanClick, imagePickerLauncher, documentPickerLauncher, ocrImagePickerLauncher) {
         listOf(
             ActionItemData(Icons.Default.Scanner, "Quét", onClick = onScanClick),
             ActionItemData(Icons.Default.PictureAsPdf, "Công cụ PDF", onClick = {}),
@@ -218,35 +195,55 @@ fun HomeScreen(
                     }
                 } else {
                     items(documentsToDisplay, key = { it.file.absolutePath }) { doc ->
+                        val onClick = remember(doc, context) {
+                            { FileOpener.openPdf(context, doc.file) }
+                        }
+                        val onDeleteClick = remember(doc, scope, context) {
+                            fun() {
+                                scope.launch {
+                                    val success = withContext(Dispatchers.IO) {
+                                        DocumentRepository.deleteDocument(doc)
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        if (success) {
+                                            Toast.makeText(context, "Đã xóa ${doc.name}", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Lỗi khi xóa ${doc.name}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        val onRenameClick = remember(doc, scope, context) {
+                            fun(newName: String) {
+                                scope.launch {
+                                    val success = withContext(Dispatchers.IO) {
+                                        DocumentRepository.renameDocument(doc, newName)
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        if (success) {
+                                            Toast.makeText(context, "Đã đổi tên thành công", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Lỗi khi đổi tên", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         DocumentCard(
                             title = doc.name,
                             date = doc.formattedDate,
                             pageCount = doc.pageCount,
-                            onClick = { FileOpener.openPdf(context, doc.file) },
-                            onDeleteClick = {
-                                scope.launch {
-                                    if (DocumentRepository.deleteDocument(doc)) {
-                                        Toast.makeText(context, "Đã xóa ${doc.name}", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "Lỗi khi xóa ${doc.name}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            },
-                            onRenameClick = { newName ->
-                                scope.launch {
-                                    if (DocumentRepository.renameDocument(doc, newName)) {
-                                        Toast.makeText(context, "Đã đổi tên thành công", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "Lỗi khi đổi tên", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
+                            onClick = onClick,
+                            onDeleteClick = onDeleteClick,
+                            onRenameClick = onRenameClick
                         )
                     }
                 }
             }
         }
-        // Dialog to show extracted text
+
         if (extractedText != null) {
             AlertDialog(
                 onDismissRequest = { extractedText = null },
@@ -264,7 +261,6 @@ fun HomeScreen(
             )
         }
 
-        // Loading indicator for OCR
         if (isOcrLoading) {
             Box(
                 modifier = Modifier.fillMaxSize(),

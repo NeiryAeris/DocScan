@@ -63,9 +63,10 @@ fun IdCardScanScreen(
 ) {
     val context = LocalContext.current
     var hasCamPermission by remember { mutableStateOf(false) }
+    val onPermissionResult = remember { { granted: Boolean -> hasCamPermission = granted } }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
-        onResult = { hasCamPermission = it }
+        onResult = onPermissionResult
     )
 
     LaunchedEffect(key1 = true) {
@@ -79,66 +80,72 @@ fun IdCardScanScreen(
     val imageCapture = remember { ImageCapture.Builder().build() }
     val scope = rememberCoroutineScope()
 
+    val onCaptureClick = remember(isProcessing, scanStep, frontImageUri, imageCapture, onScanComplete) {
+        {
+            if (isProcessing) return@remember
+
+            scope.launch(Dispatchers.Main) {
+                isProcessing = true
+                var imageProxy: ImageProxy? = null
+                try {
+                    imageProxy = takePictureAsynchronously(context, imageCapture)
+
+                    val croppedUri = withContext(Dispatchers.IO) {
+                        val croppedBitmap = cropImageToViewfinder(imageProxy)
+                        ImageUtils.saveBitmapAndGetUri(context, croppedBitmap)
+                    }
+
+                    if (croppedUri == null) {
+                        Toast.makeText(context, "Lỗi khi lưu ảnh.", Toast.LENGTH_SHORT).show()
+                        isProcessing = false
+                        return@launch
+                    }
+
+                    if (scanStep == ScanStep.FRONT) {
+                        frontImageUri = croppedUri
+                        scanStep = ScanStep.BACK
+                        isProcessing = false
+                    } else {
+                        val backImageUri = croppedUri
+                        val frontUri = frontImageUri
+                        if (frontUri != null) {
+                            val pdfUri = DocumentRepository.createPdfFromImages(
+                                context,
+                                listOf(frontUri, backImageUri)
+                            )
+                            if (pdfUri != null) {
+                                withContext(Dispatchers.IO) {
+                                    context.contentResolver.delete(frontUri, null, null)
+                                    context.contentResolver.delete(backImageUri, null, null)
+                                }
+                                onScanComplete(pdfUri)
+                            } else {
+                                Toast.makeText(context, "Lỗi khi tạo tệp PDF.", Toast.LENGTH_SHORT).show()
+                                isProcessing = false
+                            }
+                        } else {
+                            Toast.makeText(context, "Lỗi: Không tìm thấy ảnh mặt trước.", Toast.LENGTH_SHORT).show()
+                            isProcessing = false
+                        }
+                    }
+                } catch (e: ImageCaptureException) {
+                    Toast.makeText(context, "Lỗi khi chụp ảnh: ${e.message}", Toast.LENGTH_SHORT).show()
+                    isProcessing = false
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Đã xảy ra lỗi không mong muốn: ${e.message}", Toast.LENGTH_SHORT).show()
+                    isProcessing = false
+                } finally {
+                    imageProxy?.close()
+                }
+            }
+        }
+    }
+
     Scaffold(
         floatingActionButton = {
             if (hasCamPermission) {
                 FloatingActionButton(
-                    onClick = {
-                        if (isProcessing) return@FloatingActionButton
-
-                        scope.launch {
-                            isProcessing = true
-                            var imageProxy: ImageProxy? = null
-                            try {
-                                imageProxy = takePictureAsynchronously(context, imageCapture)
-
-                                val croppedUri = withContext(Dispatchers.IO) {
-                                    val croppedBitmap = cropImageToViewfinder(imageProxy)
-                                    ImageUtils.saveBitmapAndGetUri(context, croppedBitmap)
-                                }
-
-                                if (croppedUri == null) {
-                                    Toast.makeText(context, "Lỗi khi lưu ảnh.", Toast.LENGTH_SHORT).show()
-                                    isProcessing = false
-                                    return@launch
-                                }
-
-                                if (scanStep == ScanStep.FRONT) {
-                                    frontImageUri = croppedUri
-                                    scanStep = ScanStep.BACK
-                                    isProcessing = false
-                                } else {
-                                    val backImageUri = croppedUri
-                                    val frontUri = frontImageUri
-                                    if (frontUri != null) {
-                                        val pdfUri = DocumentRepository.createPdfFromImages(
-                                            context,
-                                            listOf(frontUri, backImageUri)
-                                        )
-                                        if (pdfUri != null) {
-                                            context.contentResolver.delete(frontUri, null, null)
-                                            context.contentResolver.delete(backImageUri, null, null)
-                                            onScanComplete(pdfUri)
-                                        } else {
-                                            Toast.makeText(context, "Lỗi khi tạo tệp PDF.", Toast.LENGTH_SHORT).show()
-                                            isProcessing = false
-                                        }
-                                    } else {
-                                        Toast.makeText(context, "Lỗi: Không tìm thấy ảnh mặt trước.", Toast.LENGTH_SHORT).show()
-                                        isProcessing = false
-                                    }
-                                }
-                            } catch (e: ImageCaptureException) {
-                                Toast.makeText(context, "Lỗi khi chụp ảnh: ${e.message}", Toast.LENGTH_SHORT).show()
-                                isProcessing = false
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Đã xảy ra lỗi không mong muốn: ${e.message}", Toast.LENGTH_SHORT).show()
-                                isProcessing = false
-                            } finally {
-                                imageProxy?.close() // Ensure image is closed!
-                            }
-                        }
-                    },
+                    onClick = onCaptureClick,
                     modifier = Modifier.padding(bottom = 20.dp)
                 ) {
                     if (isProcessing) {

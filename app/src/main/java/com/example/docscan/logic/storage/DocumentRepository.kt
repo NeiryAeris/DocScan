@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * A singleton repository to hold and manage the global list of documents.
@@ -41,43 +42,70 @@ object DocumentRepository {
      * Deletes a document and refreshes the list.
      */
     suspend fun deleteDocument(doc: DocumentFile): Boolean {
-        val success = AppStorage.deleteDocument(doc)
-        if (success) {
-            refresh() // Trigger a refresh
+        return withContext(Dispatchers.IO) {
+            val success = AppStorage.deleteDocument(doc)
+            if (success) {
+                refresh() // Trigger a refresh
+            }
+            success
         }
-        return success
+    }
+
+    /**
+     * Deletes multiple documents and refreshes the list.
+     */
+    suspend fun deleteDocuments(docs: List<DocumentFile>) {
+        withContext(Dispatchers.IO) {
+            docs.forEach { doc ->
+                AppStorage.deleteDocument(doc)
+            }
+        }
+        refresh()
     }
 
     /**
      * Renames a document and refreshes the list.
      */
     suspend fun renameDocument(doc: DocumentFile, newName: String): Boolean {
-        val success = AppStorage.renameDocument(doc, newName)
-        if (success) {
-            refresh() // Trigger a refresh
+        return withContext(Dispatchers.IO) {
+            val success = AppStorage.renameDocument(doc, newName)
+            if (success) {
+                refresh() // Trigger a refresh
+            }
+            success
         }
-        return success
     }
 
     /**
      * Creates a new PDF file from a list of image URIs and refreshes the document list.
      */
     suspend fun createPdfFromImages(context: Context, imageUris: List<Uri>): Uri? {
-        val pdfFile = AppStorage.createPdfFromImages(context, imageUris)
-        return if (pdfFile != null) {
-            refresh()
-            pdfFile.toUri()
-        } else {
-            null
+        return withContext(Dispatchers.IO) {
+            val pdfFile = AppStorage.createPdfFromImages(context, imageUris)
+            if (pdfFile != null) {
+                refresh()
+                pdfFile.toUri()
+            } else {
+                null
+            }
         }
     }
 
     suspend fun convertPdfToImages(context: Context, doc: DocumentFile) {
-        val success = AppStorage.convertPdfToImages(context, doc)
+        val success = withContext(Dispatchers.IO) {
+            AppStorage.convertPdfToImages(context, doc)
+        }
         if (success) {
             Toast.makeText(context, "Đã chuyển đổi thành công sang hình ảnh", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, "Lỗi khi chuyển đổi PDF sang hình ảnh", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /**
+     * Finds a document by its URI in the current list of documents.
+     */
+    fun findDocumentByUri(uri: Uri): DocumentFile? {
+        return _documents.value.find { it.file.toUri() == uri }
     }
 }

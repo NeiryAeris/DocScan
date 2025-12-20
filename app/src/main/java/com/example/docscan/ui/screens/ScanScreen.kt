@@ -78,72 +78,86 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
     val sessionState by sessionController.state.collectAsState()
     var enhanceMode by remember { mutableStateOf("color-pro") }
 
-    fun finishAndExport(andPop: Boolean = true) = scope.launch {
-        val readySlots = sessionState.slots.filterIsInstance<PageSlot.Ready>()
-        if (readySlots.isEmpty()) {
-            Toast.makeText(context, "No pages to save", Toast.LENGTH_SHORT).show()
-            if (andPop) navController.popBackStack()
-            return@launch
-        }
-
-        Toast.makeText(context, "Saving...", Toast.LENGTH_SHORT).show()
-
-        try {
-            val pagesToExport = withContext(Dispatchers.IO) {
-                readySlots.map {
-                    val jpegBytes = File(it.processedJpegPath).readBytes()
-                    EncodedPage(png = jpegBytes, width = 0, height = 0)
+    fun finishAndExport(andPop: Boolean = true) {
+        scope.launch(Dispatchers.IO) {
+            val readySlots = sessionState.slots.filterIsInstance<PageSlot.Ready>()
+            if (readySlots.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "No pages to save", Toast.LENGTH_SHORT).show()
+                    if (andPop) navController.popBackStack()
                 }
-            }
-
-            val outputDir = AppStorage.getPublicAppDir()
-            if (outputDir == null) {
-                Toast.makeText(context, "Cannot access storage directory", Toast.LENGTH_LONG).show()
-                if (andPop) navController.popBackStack()
                 return@launch
             }
 
-            val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault()).format(Date())
-            val outFile = File(outputDir, "Scan_$timestamp.pdf")
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Saving...", Toast.LENGTH_SHORT).show()
+            }
 
-            withContext(Dispatchers.IO) {
+            try {
+                val pagesToExport = readySlots.map {
+                    val jpegBytes = File(it.processedJpegPath).readBytes()
+                    EncodedPage(png = jpegBytes, width = 0, height = 0)
+                }
+
+                val outputDir = AppStorage.getPublicAppDir()
+                if (outputDir == null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Cannot access storage directory", Toast.LENGTH_LONG).show()
+                        if (andPop) navController.popBackStack()
+                    }
+                    return@launch
+                }
+
+                val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault()).format(Date())
+                val outFile = File(outputDir, "Scan_$timestamp.pdf")
+
                 AndroidPdfExporter(context).export(pagesToExport, outFile)
                 // Notify the media scanner about the new file
                 MediaScannerConnection.scanFile(context, arrayOf(outFile.toString()), null, null)
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Saved to ${outFile.name}", Toast.LENGTH_LONG).show()
+                    sessionController.discardSession()
+                    if (andPop) navController.popBackStack()
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Error saving PDF: ${e.message}", Toast.LENGTH_LONG).show()
+                    if (andPop) navController.popBackStack()
+                }
             }
-
-            Toast.makeText(context, "Saved to ${outFile.name}", Toast.LENGTH_LONG).show()
-            sessionController.discardSession()
-            if (andPop) navController.popBackStack()
-
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(context, "Error saving PDF: ${e.message}", Toast.LENGTH_LONG).show()
-            if (andPop) navController.popBackStack()
         }
     }
 
     LaunchedEffect(imageUri) {
         imageUri?.let {
-            scope.launch {
+            scope.launch(Dispatchers.IO) {
                 try {
                     val appendIndex = sessionState.slots.indexOfFirst { it is PageSlot.Empty }.let { if (it == -1) sessionState.slots.size else it }
                     if (appendIndex == sessionState.slots.size) {
                         sessionController.addEmptySlot()
                     }
 
-                    Toast.makeText(context, "Processing image...", Toast.LENGTH_SHORT).show()
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Processing image...", Toast.LENGTH_SHORT).show()
+                    }
                     val bytes = context.contentResolver.openInputStream(it)?.use(InputStream::readBytes)
                     if (bytes != null) {
                         sessionController.processIntoSlot(appendIndex, bytes, enhanceMode)
                     } else {
-                        Toast.makeText(context, "Failed to load image", Toast.LENGTH_SHORT).show()
-                        navController.popBackStack()
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Failed to load image", Toast.LENGTH_SHORT).show()
+                            navController.popBackStack()
+                        }
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    Toast.makeText(context, "Error processing image: ${e.message}", Toast.LENGTH_SHORT).show()
-                    navController.popBackStack()
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Error processing image: ${e.message}", Toast.LENGTH_SHORT).show()
+                        navController.popBackStack()
+                    }
                 }
             }
         }
@@ -151,70 +165,73 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
 
     LaunchedEffect(pdfUri) {
         pdfUri?.let { uri ->
-            scope.launch {
+            scope.launch(Dispatchers.IO) {
                 try {
-                    Toast.makeText(context, "Processing PDF...", Toast.LENGTH_SHORT).show()
-                    withContext(Dispatchers.IO) {
-                        val pfd = context.contentResolver.openFileDescriptor(uri, "r")
-                        if (pfd != null) {
-                            val renderer = PdfRenderer(pfd)
-                            val pageCount = renderer.pageCount
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Processing PDF...", Toast.LENGTH_SHORT).show()
+                    }
+                    val pfd = context.contentResolver.openFileDescriptor(uri, "r")
+                    if (pfd != null) {
+                        val renderer = PdfRenderer(pfd)
+                        val pageCount = renderer.pageCount
 
-                            val appendIndex = sessionState.slots.indexOfFirst { it is PageSlot.Empty }.let { if (it == -1) sessionState.slots.size else it }
-                            val availableEmptySlots = if (appendIndex == sessionState.slots.size) 0 else sessionState.slots.size - appendIndex
-                            val slotsToAdd = pageCount - availableEmptySlots
-                            if (slotsToAdd > 0) {
-                                repeat(slotsToAdd) {
-                                    sessionController.addEmptySlot()
-                                }
+                        val appendIndex = sessionState.slots.indexOfFirst { it is PageSlot.Empty }.let { if (it == -1) sessionState.slots.size else it }
+                        val availableEmptySlots = if (appendIndex == sessionState.slots.size) 0 else sessionState.slots.size - appendIndex
+                        val slotsToAdd = pageCount - availableEmptySlots
+                        if (slotsToAdd > 0) {
+                            repeat(slotsToAdd) {
+                                sessionController.addEmptySlot()
                             }
-
-                            for (i in 0 until pageCount) {
-                                val page = renderer.openPage(i)
-                                val bitmap = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
-                                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                page.close()
-
-                                val stream = ByteArrayOutputStream()
-                                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
-                                val byteArray = stream.toByteArray()
-                                bitmap.recycle()
-
-                                sessionController.processIntoSlot(appendIndex + i, byteArray, enhanceMode)
-                            }
-                            renderer.close()
-                            pfd.close()
                         }
+
+                        for (i in 0 until pageCount) {
+                            val page = renderer.openPage(i)
+                            val bitmap = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
+                            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            page.close()
+
+                            val stream = ByteArrayOutputStream()
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+                            val byteArray = stream.toByteArray()
+                            bitmap.recycle()
+
+                            sessionController.processIntoSlot(appendIndex + i, byteArray, enhanceMode)
+                        }
+                        renderer.close()
+                        pfd.close()
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    Toast.makeText(context, "Error processing PDF: ${e.message}", Toast.LENGTH_LONG).show()
-                    navController.popBackStack()
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Error processing PDF: ${e.message}", Toast.LENGTH_LONG).show()
+                        navController.popBackStack()
+                    }
                 }
             }
         }
     }
 
+    val captureAndProcess = remember(sessionState.slots, enhanceMode) {
+        fun() {
+            val targetSlot = sessionState.slots.firstOrNull { it is PageSlot.Empty }
+                ?: return
+            val tempFile = File.createTempFile("raw_capture_", ".jpg", context.cacheDir)
 
-    fun captureAndProcess() {
-        val targetSlot = sessionState.slots.firstOrNull { it is PageSlot.Empty }
-            ?: return
-        val tempFile = File.createTempFile("raw_capture_", ".jpg", context.cacheDir)
-
-        cameraController.takePhoto(
-            outputFile = tempFile,
-            onSaved = { file ->
-                scope.launch {
-                    val bytes = file.readBytes()
-                    sessionController.processIntoSlot(targetSlot.index, bytes, enhanceMode)
-                    file.delete()
+            cameraController.takePhoto(
+                outputFile = tempFile,
+                onSaved = { file ->
+                    scope.launch(Dispatchers.IO) {
+                        val bytes = file.readBytes()
+                        sessionController.processIntoSlot(targetSlot.index, bytes, enhanceMode)
+                        file.delete()
+                    }
+                },
+                onError = { exc ->
+                    exc.printStackTrace()
+                    Toast.makeText(context, "Capture error: ${exc.message}", Toast.LENGTH_SHORT).show()
                 }
-            },
-            onError = { exc ->
-                exc.printStackTrace()
-                Toast.makeText(context, "Capture error: ${exc.message}", Toast.LENGTH_SHORT).show()
-            }
-        )
+            )
+        }
     }
 
     Scaffold(
@@ -228,7 +245,7 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                 },
                 actions = {
                     if (sessionState.isDirty) {
-                        IconButton(onClick = { finishAndExport() }) {
+                        IconButton(onClick = { finishAndExport(true) }) {
                             Icon(Icons.Default.Check, contentDescription = "Finish")
                         }
                     }
@@ -302,7 +319,7 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                                     .size(80.dp)
                                     .clip(CircleShape)
                                     .background(if (hasCameraPermission) MaterialTheme.colorScheme.primary else Color.Gray)
-                                    .clickable(enabled = hasCameraPermission, onClick = { captureAndProcess() })
+                                    .clickable(enabled = hasCameraPermission, onClick = captureAndProcess)
                             ) {
                                 Icon(Icons.Default.Camera, "Chụp", tint = Color.White, modifier = Modifier.size(40.dp))
                             }
@@ -325,7 +342,7 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                     modifier = Modifier.fillMaxSize()
                 )
             } else if (imageUri == null && pdfUri == null) {
-                 if (hasCameraPermission) {
+                if (hasCameraPermission) {
                     var previewView by remember { mutableStateOf<PreviewView?>(null) }
                     if (previewView != null) {
                         LaunchedEffect(previewView) { cameraController.start(lifecycleOwner, previewView!!) }
@@ -351,7 +368,7 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                     }
                 }
             } else {
-                 Box(
+                Box(
                     modifier = Modifier.fillMaxSize().background(Color.Black),
                     contentAlignment = Alignment.Center
                 ) {

@@ -41,14 +41,28 @@ fun PdfToImageScreen(
         document?.let {
             isLoading = true
             bitmaps = emptyList()
-            scope.launch {
+            scope.launch(Dispatchers.IO) {
                 try {
                     val loadedBitmaps = convertPdfToImages(context, it)
-                    bitmaps = loadedBitmaps
+                    withContext(Dispatchers.Main) {
+                        bitmaps = loadedBitmaps
+                    }
                 } catch (e: Exception) {
                     // Handle exceptions
                 } finally {
-                    isLoading = false
+                    withContext(Dispatchers.Main) {
+                        isLoading = false
+                    }
+                }
+            }
+        }
+    }
+
+    val onSaveClick = remember(document, scope, context) {
+        fun() {
+            if (document != null) {
+                scope.launch {
+                    DocumentRepository.convertPdfToImages(context, document)
                 }
             }
         }
@@ -65,13 +79,7 @@ fun PdfToImageScreen(
                 },
                 actions = {
                     Button(
-                        onClick = {
-                            document?.let {
-                                scope.launch {
-                                    DocumentRepository.convertPdfToImages(context, it)
-                                }
-                            }
-                        },
+                        onClick = onSaveClick,
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
                         Text("Save")

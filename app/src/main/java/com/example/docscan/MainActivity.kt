@@ -30,6 +30,7 @@ import com.example.docscan.logic.storage.AppStorage
 import com.example.docscan.ui.MainScreen
 import com.example.docscan.ui.navigation.AppNavigation
 import com.example.docscan.ui.theme.DocScanTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -49,7 +50,7 @@ class MainActivity : ComponentActivity() {
                     onResult = { granted ->
                         if (granted) {
                             hasStoragePermission = true
-                            scope.launch {
+                            scope.launch(Dispatchers.IO) {
                                 AppStorage.getPublicAppDir()
                             }
                         } else {
@@ -71,7 +72,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     if (hasStoragePermission) {
-                       val appDir = AppStorage.getPublicAppDir()
+                        val appDir = AppStorage.getPublicAppDir()
                         if (appDir == null) {
                             Toast.makeText(this@MainActivity, "Failed to create app directory.", Toast.LENGTH_SHORT).show()
                         }
