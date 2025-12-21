@@ -1,6 +1,7 @@
 package com.example.docscan.logic.storage
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import android.widget.Toast
 import androidx.core.net.toUri
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * A singleton repository to hold and manage the global list of documents.
@@ -99,6 +101,24 @@ object DocumentRepository {
             Toast.makeText(context, "Đã chuyển đổi thành công sang hình ảnh", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, "Lỗi khi chuyển đổi PDF sang hình ảnh", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Saves a list of bitmaps as JPG files and returns the list of saved files.
+     */
+    suspend fun saveBitmapsAsImages(context: Context, bitmaps: List<Bitmap>): List<File> {
+        return withContext(Dispatchers.IO) {
+            val savedFiles = mutableListOf<File>()
+            bitmaps.forEach { bitmap ->
+                val file = AppStorage.saveBitmapAsImage(context, bitmap)
+                if (file != null) {
+                    savedFiles.add(file)
+                }
+            }
+            // After saving, refresh the documents list to include the new images if they are in a monitored directory.
+            refresh()
+            savedFiles
         }
     }
 

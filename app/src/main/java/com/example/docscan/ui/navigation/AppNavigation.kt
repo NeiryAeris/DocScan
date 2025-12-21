@@ -9,11 +9,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.core.net.toUri
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -22,8 +19,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.docscan.App
-import com.example.docscan.logic.storage.DocumentFile
-import com.example.docscan.logic.storage.DocumentRepository
 import com.example.docscan.ui.BottomNavItem
 import com.example.docscan.ui.screens.*
 import java.net.URLDecoder
@@ -88,6 +83,22 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
                 ScanScreen(navController, imageUri = imageUri, pdfUri = pdfUri)
             }
 
+            composable(
+                route = "signing"
+            ) { backStackEntry ->
+                val pdfUri = App.pdfToSign
+                if (pdfUri != null) {
+                    SigningScreen(navController)
+                } else {
+                    // Handle the case where the URI is null, e.g., navigate back or show an error
+                    navController.popBackStack()
+                }
+            }
+
+            composable("signature_management") {
+                SignatureManagementScreen(navController = navController)
+            }
+
             composable("id_card_scan") {
                 IdCardScanScreen(
                     onScanComplete = { uri ->
@@ -108,16 +119,9 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
                 arguments = listOf(navArgument("documentUri") { type = NavType.StringType })
             ) { backStackEntry ->
                 val documentUriString = backStackEntry.arguments?.getString("documentUri")
-                val document by produceState<DocumentFile?>(initialValue = null, documentUriString) {
-                    value = documentUriString?.let { uriString ->
-                        val decodedUri = URLDecoder.decode(uriString, StandardCharsets.UTF_8.name())
-                        val documentUri = Uri.parse(decodedUri)
-                        DocumentRepository.findDocumentByUri(documentUri)
-                    }
-                }
-
-                if (document != null) {
-                    PdfToImageScreen(navController, document)
+                if (documentUriString != null) {
+                    val decodedUri = URLDecoder.decode(documentUriString, StandardCharsets.UTF_8.name())
+                    PdfToImageScreen(navController, encodedUri = decodedUri)
                 }
             }
 

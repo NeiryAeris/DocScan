@@ -1,6 +1,7 @@
 package com.example.docscan
 
 import android.app.Application
+import android.net.Uri
 import android.util.Log
 import com.example.docscan.logic.ocr.OcrGatewayImpl
 import com.example.docscan.logic.utils.NodeCloudOcrGateway
@@ -39,5 +40,7 @@ class App : Application() {
     companion object {
         lateinit var ocrGateway: OcrGatewayImpl
             private set
+
+        var pdfToSign: Uri? = null
     }
 }

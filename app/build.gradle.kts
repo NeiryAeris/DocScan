@@ -91,6 +91,7 @@ dependencies {
     //File ops
     implementation(libs.itextg)
     implementation("org.apache.poi:poi-ooxml:5.2.5")
+    implementation("androidx.documentfile:documentfile:1.0.1")
     implementation(libs.androidx.navigation.compose)
     implementation(libs.material)
     implementation(libs.androidx.material.icons.extended.android)

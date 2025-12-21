@@ -1,8 +1,11 @@
 package com.example.docscan.ui.screens
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
+import android.net.Uri
 import android.os.ParcelFileDescriptor
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -17,38 +20,40 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.navigation.NavHostController
-import com.example.docscan.logic.storage.DocumentFile
 import com.example.docscan.logic.storage.DocumentRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.IOException
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PdfToImageScreen(
     navController: NavHostController,
-    document: DocumentFile?
+    encodedUri: String?
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val uri = remember(encodedUri) { Uri.parse(encodedUri) }
 
     var bitmaps by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
 
-    LaunchedEffect(document) {
-        document?.let {
+    LaunchedEffect(uri) {
+        if (uri != null) {
             isLoading = true
-            bitmaps = emptyList()
-            scope.launch(Dispatchers.IO) {
+            scope.launch {
                 try {
-                    val loadedBitmaps = convertPdfToImages(context, it)
+                    val loadedBitmaps = convertPdfToImages(context, uri)
                     withContext(Dispatchers.Main) {
                         bitmaps = loadedBitmaps
                     }
                 } catch (e: Exception) {
-                    // Handle exceptions
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Lỗi khi chuyển đổi PDF: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
                 } finally {
                     withContext(Dispatchers.Main) {
                         isLoading = false
@@ -58,11 +63,17 @@ fun PdfToImageScreen(
         }
     }
 
-    val onSaveClick = remember(document, scope, context) {
-        fun() {
-            if (document != null) {
-                scope.launch {
-                    DocumentRepository.convertPdfToImages(context, document)
+    val onSaveClick: () -> Unit = {
+        scope.launch {
+            try {
+                val imageFiles = DocumentRepository.saveBitmapsAsImages(context, bitmaps)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Đã lưu ${imageFiles.size} ảnh.", Toast.LENGTH_LONG).show()
+                    navController.popBackStack()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Lỗi khi lưu ảnh: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -71,7 +82,7 @@ fun PdfToImageScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("PDF to Image") },
+                title = { Text("PDF thành ảnh") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
@@ -80,20 +91,25 @@ fun PdfToImageScreen(
                 actions = {
                     Button(
                         onClick = onSaveClick,
-                        modifier = Modifier.padding(end = 8.dp)
+                        modifier = Modifier.padding(end = 8.dp),
+                        enabled = bitmaps.isNotEmpty() && !isLoading
                     ) {
-                        Text("Save")
+                        Text("Lưu")
                     }
                 }
             )
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier.padding(paddingValues),
-            horizontalAlignment = Alignment.CenterHorizontally
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+            contentAlignment = Alignment.Center
         ) {
             if (isLoading) {
                 CircularProgressIndicator()
+            } else if (bitmaps.isEmpty()) {
+                Text("Không thể tải PDF hoặc PDF trống.")
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
@@ -103,7 +119,9 @@ fun PdfToImageScreen(
                         Image(
                             bitmap = bitmap.asImageBitmap(),
                             contentDescription = null,
-                            modifier = Modifier.padding(4.dp)
+                            modifier = Modifier
+                                .padding(4.dp)
+                                .fillMaxWidth()
                         )
                     }
                 }
@@ -112,20 +130,24 @@ fun PdfToImageScreen(
     }
 }
 
-private suspend fun convertPdfToImages(context: android.content.Context, document: DocumentFile): List<Bitmap> {
+private suspend fun convertPdfToImages(context: Context, uri: Uri): List<Bitmap> {
     return withContext(Dispatchers.IO) {
         val bitmaps = mutableListOf<Bitmap>()
-        val pfd = context.contentResolver.openFileDescriptor(document.file.toUri(), "r")
-        pfd?.use { 
-            val renderer = PdfRenderer(it)
-            for (i in 0 until renderer.pageCount) {
-                renderer.openPage(i).use { page ->
-                    val bitmap = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
-                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                    bitmaps.add(bitmap)
+        try {
+            val pfd = context.contentResolver.openFileDescriptor(uri, "r")
+            pfd?.use {
+                val renderer = PdfRenderer(it)
+                for (i in 0 until renderer.pageCount) {
+                    renderer.openPage(i).use { page ->
+                        val bitmap = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
+                        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        bitmaps.add(bitmap)
+                    }
                 }
+                renderer.close()
             }
-            renderer.close()
+        } catch (e: IOException) {
+            e.printStackTrace()
         }
         bitmaps
     }

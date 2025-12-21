@@ -184,4 +184,32 @@ object AppStorage {
             false
         }
     }
+
+    /**
+     * Saves a bitmap as a JPG file in the public app directory.
+     *
+     * @param context The context.
+     * @param bitmap The bitmap to save.
+     * @return The saved file, or null if an error occurred.
+     */
+    suspend fun saveBitmapAsImage(context: Context, bitmap: Bitmap): File? = withContext(Dispatchers.IO) {
+        val appDir = getPublicAppDir() ?: return@withContext null
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        // Adding a random element to distinguish files saved at the same second
+        val imageFile = File(appDir, "IMG_${timeStamp}_${System.currentTimeMillis()}.jpg")
+
+        try {
+            FileOutputStream(imageFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+            }
+            imageFile
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Clean up if something went wrong
+            if (imageFile.exists()) {
+                imageFile.delete()
+            }
+            null
+        }
+    }
 }
