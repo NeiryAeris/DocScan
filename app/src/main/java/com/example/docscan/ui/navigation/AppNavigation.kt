@@ -98,6 +98,9 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
             composable("signature_management") {
                 SignatureManagementScreen(navController = navController)
             }
+            composable("add_watermark") {
+                AddWatermarkScreen(navController = navController)
+            }
 
             composable("id_card_scan") {
                 IdCardScanScreen(
