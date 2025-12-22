@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -97,4 +99,11 @@ dependencies {
     implementation(libs.androidx.material.icons.extended.android)
     implementation(libs.kotlinx.coroutines.android)
 
+    // Firebase Auth
+    implementation(platform("com.google.firebase:firebase-bom:34.7.0"))
+    implementation ("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-analytics")
+
+    // Google Sign In
+    implementation ("com.google.android.gms:play-services-auth:21.1.0")
 }
