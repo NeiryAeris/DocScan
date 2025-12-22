@@ -1,54 +1,131 @@
 package com.example.docscan.logic.storage
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.net.Uri
+import android.widget.Toast
+import androidx.core.net.toUri
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
-class DocumentRepository(private val context: Context) {
+/**
+ * A singleton repository to hold and manage the global list of documents.
+ * This ensures data is loaded only once and is instantly available across all screens.
+ */
+object DocumentRepository {
+    private val _documents = MutableStateFlow<List<DocumentFile>>(emptyList())
+    val documents = _documents.asStateFlow()
 
-    data class DocSummary(
-        val docId: String,
-        val docDir: File,
-        val pagesDir: File,
-        val pageCount: Int,
-        val coverPage: File? // first page jpg if any
-    )
+    // Use a custom scope to ensure repository operations don't get cancelled with screen-level scopes.
+    private val repositoryScope = CoroutineScope(Dispatchers.Main)
 
-    private fun documentsRoot(): File =
-        File(context.getExternalFilesDir(null), "documents").apply { mkdirs() }
+    init {
+        // Initial load when the repository is first created.
+        refresh()
+    }
 
-    fun listDocumentsNewestFirst(): List<DocSummary> {
-        val root = documentsRoot()
-        val docDirs = root.listFiles { f -> f.isDirectory }?.toList().orEmpty()
+    /**
+     * Refreshes the document list from storage off the main thread.
+     * This is a non-blocking call that updates the flow when complete.
+     */
+    fun refresh() {
+        repositoryScope.launch(Dispatchers.IO) {
+            val updatedDocs = AppStorage.listPdfDocuments()
+            _documents.value = updatedDocs
+        }
+    }
 
-        return docDirs
-            .sortedByDescending { it.lastModified() }
-            .mapNotNull { docDir ->
-                val docId = docDir.name
-                val pagesDir = File(docDir, "pages")
-                val pages = pagesDir.listFiles { f ->
-                    f.isFile && (f.name.endsWith(".jpg", true) || f.name.endsWith(".jpeg", true))
-                }?.sortedBy { it.name }.orEmpty()
-
-                DocSummary(
-                    docId = docId,
-                    docDir = docDir,
-                    pagesDir = pagesDir,
-                    pageCount = pages.size,
-                    coverPage = pages.firstOrNull()
-                )
+    /**
+     * Deletes a document and refreshes the list.
+     */
+    suspend fun deleteDocument(doc: DocumentFile): Boolean {
+        return withContext(Dispatchers.IO) {
+            val success = AppStorage.deleteDocument(doc)
+            if (success) {
+                refresh() // Trigger a refresh
             }
+            success
+        }
     }
 
-    fun listPages(docId: String): List<File> {
-        val pagesDir = File(documentsRoot(), "$docId/pages")
-        val pages = pagesDir.listFiles { f ->
-            f.isFile && (f.name.endsWith(".jpg", true) || f.name.endsWith(".jpeg", true))
-        }?.sortedBy { it.name }.orEmpty()
-        return pages
+    /**
+     * Deletes multiple documents and refreshes the list.
+     */
+    suspend fun deleteDocuments(docs: List<DocumentFile>) {
+        withContext(Dispatchers.IO) {
+            docs.forEach { doc ->
+                AppStorage.deleteDocument(doc)
+            }
+        }
+        refresh()
     }
 
-    fun deleteDocument(docId: String): Boolean {
-        val dir = File(documentsRoot(), docId)
-        return dir.exists() && dir.deleteRecursively()
+    /**
+     * Renames a document and refreshes the list.
+     */
+    suspend fun renameDocument(doc: DocumentFile, newName: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            val success = AppStorage.renameDocument(doc, newName)
+            if (success) {
+                refresh() // Trigger a refresh
+            }
+            success
+        }
+    }
+
+    /**
+     * Creates a new PDF file from a list of image URIs and refreshes the document list.
+     */
+    suspend fun createPdfFromImages(context: Context, imageUris: List<Uri>): Uri? {
+        return withContext(Dispatchers.IO) {
+            val pdfFile = AppStorage.createPdfFromImages(context, imageUris)
+            if (pdfFile != null) {
+                refresh()
+                pdfFile.toUri()
+            } else {
+                null
+            }
+        }
+    }
+
+    suspend fun convertPdfToImages(context: Context, doc: DocumentFile) {
+        val success = withContext(Dispatchers.IO) {
+            AppStorage.convertPdfToImages(context, doc)
+        }
+        if (success) {
+            Toast.makeText(context, "Đã chuyển đổi thành công sang hình ảnh", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Lỗi khi chuyển đổi PDF sang hình ảnh", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Saves a list of bitmaps as JPG files and returns the list of saved files.
+     */
+    suspend fun saveBitmapsAsImages(context: Context, bitmaps: List<Bitmap>): List<File> {
+        return withContext(Dispatchers.IO) {
+            val savedFiles = mutableListOf<File>()
+            bitmaps.forEach { bitmap ->
+                val file = AppStorage.saveBitmapAsImage(context, bitmap)
+                if (file != null) {
+                    savedFiles.add(file)
+                }
+            }
+            // After saving, refresh the documents list to include the new images if they are in a monitored directory.
+            refresh()
+            savedFiles
+        }
+    }
+
+    /**
+     * Finds a document by its URI in the current list of documents.
+     */
+    fun findDocumentByUri(uri: Uri): DocumentFile? {
+        return _documents.value.find { it.file.toUri() == uri }
     }
 }
