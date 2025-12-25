@@ -70,3 +70,4 @@ docscan_smoke_doc_*.pdf
 Thumbs.db
 ehthumbs.db
 *.stackdump
+app/google-services.json
