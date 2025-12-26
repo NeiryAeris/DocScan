@@ -1,6 +1,9 @@
 package com.example.docscan.ui.navigation
 
 import android.net.Uri
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,7 +38,11 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
     ) {
         NavHost(
             navController = navController,
-            startDestination = BottomNavItem.Home.route
+            startDestination = BottomNavItem.Home.route,
+            enterTransition = { fadeIn(animationSpec = tween(300)) },
+            exitTransition = { fadeOut(animationSpec = tween(300)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(300)) },
+            popExitTransition = { fadeOut(animationSpec = tween(300)) }
         ) {
             composable(BottomNavItem.Home.route) {
                 HomeScreen(
@@ -97,6 +104,9 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
 
             composable("signature_management") {
                 SignatureManagementScreen(navController = navController)
+            }
+            composable("add_watermark") {
+                AddWatermarkScreen(navController = navController)
             }
 
             composable("id_card_scan") {

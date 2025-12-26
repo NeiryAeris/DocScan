@@ -35,6 +35,8 @@ import com.example.docscan.ui.components.ActionItemData
 import com.example.docscan.ui.components.SectionTitle
 import com.example.domain.interfaces.ocr.OcrGateway
 import com.example.ocr.core.api.OcrImage
+import com.itextpdf.text.Document
+import com.itextpdf.text.pdf.PdfCopy
 import com.itextpdf.text.pdf.PdfReader
 import com.itextpdf.text.pdf.parser.PdfTextExtractor
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +66,7 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
     var pdfUriToConvertToPpt by remember { mutableStateOf<Uri?>(null) }
     var pdfUriToConvertToImage by remember { mutableStateOf<Uri?>(null) }
     var pdfUriToConvertToExcel by remember { mutableStateOf<Uri?>(null) }
+    var pdfUrisToMerge by remember { mutableStateOf<List<Uri>?>(null) }
 
     val onImageResult = remember(navController) {
         { uri: Uri? ->
@@ -142,6 +145,79 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
                     context.contentResolver.takePersistableUriPermission(uri, takeFlags)
                     App.pdfToSign = uri
                     navController.navigate("signing")
+                } catch (e: SecurityException) {
+                    e.printStackTrace()
+                    Toast.makeText(context, "Lỗi quyền: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    )
+
+    val mergedPdfSaverLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf"),
+        onResult = { outputUri ->
+            if (outputUri != null) {
+                val sourcePdfUris = pdfUrisToMerge
+                if (!sourcePdfUris.isNullOrEmpty()) {
+                    scope.launch {
+                        isConverting = true
+                        Toast.makeText(context, "Đang hợp nhất các tệp...", Toast.LENGTH_SHORT).show()
+                        try {
+                            withContext(Dispatchers.IO) {
+                                val outputStream = context.contentResolver.openOutputStream(outputUri)
+                                    ?: throw IOException("Không thể tạo tệp PDF đầu ra.")
+                                val document = Document()
+                                val pdfCopy = PdfCopy(document, outputStream)
+                                document.open()
+                                sourcePdfUris.forEach { uri ->
+                                    val inputStream = context.contentResolver.openInputStream(uri)
+                                    val reader = PdfReader(inputStream)
+                                    for (i in 1..reader.numberOfPages) {
+                                        pdfCopy.addPage(pdfCopy.getImportedPage(reader, i))
+                                    }
+                                    pdfCopy.freeReader(reader)
+                                    reader.close()
+                                }
+                                document.close()
+                            }
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "Các tệp đã được hợp nhất thành công", Toast.LENGTH_LONG).show()
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "Lỗi khi hợp nhất tệp: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        } finally {
+                            isConverting = false
+                            pdfUrisToMerge = null
+                        }
+                    }
+                }
+            } else {
+                Toast.makeText(context, "Đã hủy lưu", Toast.LENGTH_SHORT).show()
+                pdfUrisToMerge = null
+            }
+        }
+    )
+
+    val mergePdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments(),
+        onResult = { uris: List<Uri> ->
+            if (uris.isNotEmpty()) {
+                if (uris.size < 2) {
+                    Toast.makeText(context, "Vui lòng chọn ít nhất 2 tệp để hợp nhất", Toast.LENGTH_LONG).show()
+                    return@rememberLauncherForActivityResult
+                }
+                try {
+                    uris.forEach { uri ->
+                        val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        context.contentResolver.takePersistableUriPermission(uri, takeFlags)
+                    }
+                    pdfUrisToMerge = uris
+                    Toast.makeText(context, "${uris.size} tệp được chọn. Bây giờ, hãy chọn nơi lưu tệp đã hợp nhất.", Toast.LENGTH_LONG).show()
+                    val defaultFileName = "merged-${System.currentTimeMillis()}.pdf"
+                    mergedPdfSaverLauncher.launch(defaultFileName)
                 } catch (e: SecurityException) {
                     e.printStackTrace()
                     Toast.makeText(context, "Lỗi quyền: ${e.message}", Toast.LENGTH_LONG).show()
@@ -485,13 +561,12 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
             ActionItemData(Icons.Default.Photo, "PDF thành ảnh") { onPdfToImageResultLauncher.launch(arrayOf("application/pdf")) }
         )
     }
-    val editActions = remember(context, onSignPdfResult, navController) {
+    val editActions = remember(context, onSignPdfResult, navController, mergePdfLauncher) {
         listOf(
             ActionItemData(Icons.Default.Draw, "Ký tên") { onSignPdfResult.launch(arrayOf("application/pdf")) },
-            ActionItemData(Icons.Default.Edit, "Quản lý chữ ký") { navController.navigate("signature_management") },
-            ActionItemData(Icons.AutoMirrored.Filled.BrandingWatermark, "Thêm logo mờ") { Toast.makeText(context, "Chức năng đang được phát triển", Toast.LENGTH_SHORT).show() },
+            ActionItemData(Icons.AutoMirrored.Filled.BrandingWatermark, "Thêm logo mờ") { navController.navigate("add_watermark") },
             ActionItemData(Icons.Default.AutoFixHigh, "Xóa thông minh") { Toast.makeText(context, "Chức năng đang được phát triển", Toast.LENGTH_SHORT).show() },
-            ActionItemData(Icons.AutoMirrored.Filled.MergeType, "Hợp nhất tập tin") { Toast.makeText(context, "Chức năng đang được phát triển", Toast.LENGTH_SHORT).show() }
+            ActionItemData(Icons.AutoMirrored.Filled.MergeType, "Hợp nhất tập tin") { mergePdfLauncher.launch(arrayOf("application/pdf")) }
         )
     }
 

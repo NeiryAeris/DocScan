@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -47,8 +50,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -385,29 +387,84 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
 
 @Composable
 fun SlotItemView(slot: PageSlot) {
-    Box(
-        modifier = Modifier
-            .size(60.dp, 80.dp)
-            .background(Color.DarkGray, MaterialTheme.shapes.small)
-            .clip(MaterialTheme.shapes.small)
-            .border(1.dp, Color.White, MaterialTheme.shapes.small),
-        contentAlignment = Alignment.Center
-    ) {
-        when (slot) {
-            is PageSlot.Empty -> Text("${slot.index + 1}", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.labelSmall)
-            is PageSlot.Processing -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = Color.White)
-            is PageSlot.Ready -> {
+    val shape = MaterialTheme.shapes.medium
+    val baseModifier = Modifier
+        .size(60.dp, 80.dp)
+        .clip(shape)
+
+    when (slot) {
+        is PageSlot.Empty -> {
+            val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
+            val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
+            Box(
+                modifier = baseModifier.background(surfaceVariantColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val strokeWidth = 1.dp.toPx()
+                    val pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                    drawRoundRect(
+                        color = onSurfaceVariantColor,
+                        style = Stroke(width = strokeWidth, pathEffect = pathEffect)
+                    )
+                }
+                Text(
+                    text = "${slot.index + 1}",
+                    color = onSurfaceVariantColor,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
+        is PageSlot.Processing -> {
+            Box(
+                modifier = baseModifier.background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        is PageSlot.Ready -> {
+            Box(
+                modifier = baseModifier
+                    .border(2.dp, MaterialTheme.colorScheme.primary, shape)
+            ) {
                 AsyncImage(
                     model = File(slot.processedJpegPath),
                     contentDescription = "Page ${slot.index}",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
-                Box(modifier = Modifier.align(Alignment.BottomEnd).background(Color.Black.copy(alpha = 0.6f)).padding(2.dp)) {
-                    Text("${slot.index + 1}", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "${slot.index + 1}",
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.labelSmall
+                    )
                 }
             }
-            is PageSlot.Failed -> Icon(Icons.Default.Close, "Error", tint = MaterialTheme.colorScheme.error)
+        }
+        is PageSlot.Failed -> {
+            Box(
+                modifier = baseModifier
+                    .background(MaterialTheme.colorScheme.errorContainer)
+                    .border(2.dp, MaterialTheme.colorScheme.error, shape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = "Error",
+                    tint = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
         }
     }
 }
