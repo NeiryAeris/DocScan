@@ -59,6 +59,9 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.activity.compose)
 
+    // Accompanist
+    implementation("com.google.accompanist:accompanist-navigation-animation:0.32.0")
+
     // Tooling for @Preview
     implementation(libs.androidx.ui.tooling.preview)   // gives you @Preview annotation
     debugImplementation(libs.androidx.ui.tooling)      // interactive preview in Android Studio

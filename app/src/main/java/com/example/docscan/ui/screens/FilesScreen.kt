@@ -1,6 +1,8 @@
 package com.example.docscan.ui.screens
 
+import android.graphics.Bitmap
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,6 +14,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -20,6 +24,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.docscan.logic.storage.DocumentFile
 import com.example.docscan.logic.storage.DocumentRepository
 import com.example.docscan.logic.utils.FileOpener
+import com.example.docscan.logic.utils.PdfThumbnailGenerator
 import com.example.docscan.ui.components.DocumentCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -32,9 +37,25 @@ fun FilesScreen(navController: NavHostController? = null) {
     val scope = rememberCoroutineScope()
 
     val documents by DocumentRepository.documents.collectAsState()
+    var thumbnails by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
 
     var selectionMode by remember { mutableStateOf(false) }
     val selectedDocuments = remember { mutableStateListOf<DocumentFile>() }
+
+    LaunchedEffect(documents) {
+        val currentThumbnails = thumbnails.toMutableMap()
+        documents.forEach { doc ->
+            if (!currentThumbnails.containsKey(doc.file.absolutePath)) {
+                launch {
+                    val thumbnail = PdfThumbnailGenerator.generateThumbnail(context, doc.file)
+                    if (thumbnail != null) {
+                        currentThumbnails[doc.file.absolutePath] = thumbnail
+                        thumbnails = currentThumbnails.toMap()
+                    }
+                }
+            }
+        }
+    }
 
     val clearSelection = remember {
         fun() {
@@ -92,84 +113,100 @@ fun FilesScreen(navController: NavHostController? = null) {
             )
         }
     ) { paddingValues ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            if (documents.isEmpty()) {
-                item {
-                    Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Chưa có tài liệu nào")
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFA9FFF8),
+                            Color(0xFFF4FAFE),
+                            Color(0xFFFFFFFF)
+                        )
+                    )
+                )
+                .padding(paddingValues)
+        ) {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                if (documents.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Chưa có tài liệu nào")
+                        }
                     }
-                }
-            } else {
-                items(documents, key = { it.file.absolutePath }) { doc ->
-                    val isSelected = selectedDocuments.contains(doc)
+                } else {
+                    items(documents, key = { it.file.absolutePath }) { doc ->
+                        val isSelected = selectedDocuments.contains(doc)
 
-                    val onClick = remember(selectionMode, isSelected, doc, context) {
-                        fun() {
-                            if (selectionMode) {
-                                if (isSelected) {
-                                    selectedDocuments.remove(doc)
+                        val onClick = remember(selectionMode, isSelected, doc, context) {
+                            fun() {
+                                if (selectionMode) {
+                                    if (isSelected) {
+                                        selectedDocuments.remove(doc)
+                                    } else {
+                                        selectedDocuments.add(doc)
+                                    }
                                 } else {
+                                    FileOpener.openPdf(context, doc.file)
+                                }
+                            }
+                        }
+
+                        val onLongClick = remember(selectionMode, doc) {
+                            fun() {
+                                if (!selectionMode) {
+                                    selectionMode = true
                                     selectedDocuments.add(doc)
                                 }
-                            } else {
-                                FileOpener.openPdf(context, doc.file)
                             }
                         }
-                    }
 
-                    val onLongClick = remember(selectionMode, doc) {
-                        fun() {
-                            if (!selectionMode) {
-                                selectionMode = true
-                                selectedDocuments.add(doc)
-                            }
-                        }
-                    }
-
-                    val onDeleteClick = remember(doc, scope, context) {
-                        fun() {
-                            scope.launch {
-                                val success = withContext(Dispatchers.IO) {
-                                    DocumentRepository.deleteDocument(doc)
-                                }
-                                withContext(Dispatchers.Main) {
-                                    if (success) {
-                                        Toast.makeText(context, "Đã xóa ${doc.name}", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "Lỗi khi xóa ${doc.name}", Toast.LENGTH_SHORT).show()
+                        val onDeleteClick = remember(doc, scope, context) {
+                            fun() {
+                                scope.launch {
+                                    val success = withContext(Dispatchers.IO) {
+                                        DocumentRepository.deleteDocument(doc)
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        if (success) {
+                                            Toast.makeText(context, "Đã xóa ${doc.name}", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Lỗi khi xóa ${doc.name}", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    val onRenameClick = remember(doc, scope, context) {
-                        fun(newName: String) {
-                            scope.launch {
-                                val success = withContext(Dispatchers.IO) {
-                                    DocumentRepository.renameDocument(doc, newName)
-                                }
-                                withContext(Dispatchers.Main) {
-                                    if (success) {
-                                        Toast.makeText(context, "Đã đổi tên thành công", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "Lỗi khi đổi tên", Toast.LENGTH_SHORT).show()
+                        val onRenameClick = remember(doc, scope, context) {
+                            fun(newName: String) {
+                                scope.launch {
+                                    val success = withContext(Dispatchers.IO) {
+                                        DocumentRepository.renameDocument(doc, newName)
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        if (success) {
+                                            Toast.makeText(context, "Đã đổi tên thành công", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Lỗi khi đổi tên", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    DocumentCard(
-                        title = doc.name,
-                        date = doc.formattedDate,
-                        pageCount = doc.pageCount,
-                        isSelected = isSelected,
-                        onClick = onClick,
-                        onLongClick = onLongClick,
-                        onDeleteClick = onDeleteClick,
-                        onRenameClick = onRenameClick
-                    )
+                        DocumentCard(
+                            title = doc.name,
+                            date = doc.formattedDate,
+                            pageCount = doc.pageCount,
+                            thumbnail = thumbnails[doc.file.absolutePath],
+                            isSelected = isSelected,
+                            onClick = onClick,
+                            onLongClick = onLongClick,
+                            onDeleteClick = onDeleteClick,
+                            onRenameClick = onRenameClick
+                        )
+                    }
                 }
             }
         }

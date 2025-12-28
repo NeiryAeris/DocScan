@@ -11,25 +11,25 @@ import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.BrandingWatermark
-import androidx.compose.material.icons.automirrored.filled.MergeType
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.example.docscan.App
+import com.example.docscan.R
 import com.example.docscan.ui.components.ActionGrid
 import com.example.docscan.ui.components.ActionItemData
 import com.example.docscan.ui.components.SectionTitle
@@ -542,47 +542,59 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
 
     val scanActions = remember(navController, ocrImagePickerLauncher) {
         listOf(
-            ActionItemData(Icons.Default.Scanner, "Quét tài liệu") { navController.navigate("scan") },
-            ActionItemData(Icons.Default.CreditCard, "Thẻ ID") { navController.navigate("id_card_scan") },
-            ActionItemData(Icons.Default.TextFields, "Trích xuất văn bản") { ocrImagePickerLauncher.launch("image/*") }
+            ActionItemData(R.drawable.quet_tai_lieu, "Quét tài liệu") { navController.navigate("scan") },
+            ActionItemData(R.drawable.the_id, "Thẻ ID") { navController.navigate("id_card_scan") },
+            ActionItemData(R.drawable.trich_xuat_van_ban, "Trích xuất văn bản") { ocrImagePickerLauncher.launch("image/*") }
         )
     }
     val importActions = remember(imagePickerLauncher, documentPickerLauncher) {
         listOf(
-            ActionItemData(Icons.Default.Image, "Nhập ảnh") { imagePickerLauncher.launch("image/*") },
-            ActionItemData(Icons.Default.UploadFile, "Nhập tệp tin") { documentPickerLauncher.launch(arrayOf("application/pdf")) }
+            ActionItemData(R.drawable.nhap_anh, "Nhập ảnh") { imagePickerLauncher.launch("image/*") },
+            ActionItemData(R.drawable.nhap_tep_tin, "Nhập tệp tin") { documentPickerLauncher.launch(arrayOf("application/pdf")) }
         )
     }
     val convertActions = remember(onPdfToImageResultLauncher, onPdfToWordResult, onPdfToPptResult, onPdfToExcelResultLauncher) {
         listOf(
-            ActionItemData(Icons.Default.Description, "Thành Word") { onPdfToWordResult.launch(arrayOf("application/pdf")) },
-            ActionItemData(Icons.Default.Slideshow, "Thành PPT") { onPdfToPptResult.launch(arrayOf("application/pdf")) },
-            ActionItemData(Icons.Default.GridOn, "Thành Excel") { onPdfToExcelResultLauncher.launch(arrayOf("application/pdf")) },
-            ActionItemData(Icons.Default.Photo, "PDF thành ảnh") { onPdfToImageResultLauncher.launch(arrayOf("application/pdf")) }
+            ActionItemData(R.drawable.thanh_word, "Thành Word") { onPdfToWordResult.launch(arrayOf("application/pdf")) },
+            ActionItemData(R.drawable.thanh_ppt, "Thành PPT") { onPdfToPptResult.launch(arrayOf("application/pdf")) },
+            ActionItemData(R.drawable.thanh_excel, "Thành Excel") { onPdfToExcelResultLauncher.launch(arrayOf("application/pdf")) },
+            ActionItemData(R.drawable.thanh_anh, "PDF thành ảnh") { onPdfToImageResultLauncher.launch(arrayOf("application/pdf")) }
         )
     }
     val editActions = remember(context, onSignPdfResult, navController, mergePdfLauncher) {
         listOf(
-            ActionItemData(Icons.Default.Draw, "Ký tên") { onSignPdfResult.launch(arrayOf("application/pdf")) },
-            ActionItemData(Icons.AutoMirrored.Filled.BrandingWatermark, "Thêm logo mờ") { navController.navigate("add_watermark") },
-            ActionItemData(Icons.Default.AutoFixHigh, "Xóa thông minh") { Toast.makeText(context, "Chức năng đang được phát triển", Toast.LENGTH_SHORT).show() },
-            ActionItemData(Icons.AutoMirrored.Filled.MergeType, "Hợp nhất tập tin") { mergePdfLauncher.launch(arrayOf("application/pdf")) }
+            ActionItemData(R.drawable.ky_ten, "Ký tên") { onSignPdfResult.launch(arrayOf("application/pdf")) },
+            ActionItemData(R.drawable.them_logo_mo, "Thêm logo mờ") { navController.navigate("add_watermark") },
+            ActionItemData(R.drawable.xoa_thong_minh, "Xóa thông minh") { Toast.makeText(context, "Chức năng đang được phát triển", Toast.LENGTH_SHORT).show() },
+            ActionItemData(R.drawable.hop_nhat_tep_tin, "Hợp nhất tập tin") { mergePdfLauncher.launch(arrayOf("application/pdf")) }
         )
     }
 
     val onDismissDialog = remember { { extractedText = null } }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFA9FFF8),
+                        Color(0xFFF4FAFE),
+                        Color(0xFFFFFFFF)
+                    )
+                )
+            )
+    ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
+            color = Color.Transparent
         ) {
             LazyColumn(modifier = Modifier.padding(bottom = 16.dp)) {
                 item { SectionTitle("Quét") }
                 item { ActionGrid(scanActions) }
 
                 item { SectionTitle("Nhập") }
-                item { ActionGrid(importActions, columnCount = 2) }
+                item { ActionGrid(importActions) }
 
                 item { SectionTitle("Chuyển đổi") }
                 item { ActionGrid(convertActions) }
