@@ -1,6 +1,8 @@
 package com.example.docscan.ui.components
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -10,6 +12,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -22,6 +26,7 @@ fun DocumentCard(
     title: String,
     date: String,
     pageCount: Int,
+    thumbnail: Bitmap?,
     onClick: () -> Unit = {},
     onLongClick: () -> Unit = {},
     onDeleteClick: () -> Unit = {},
@@ -59,12 +64,24 @@ fun DocumentCard(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Outlined.PictureAsPdf,
-                contentDescription = "Document Thumbnail",
-                modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
+            if (thumbnail != null) {
+                Image(
+                    bitmap = thumbnail.asImageBitmap(),
+                    contentDescription = "Document Thumbnail",
+                    modifier = Modifier
+                        .size(48.dp)
+                        .aspectRatio(1f / 1.41f), // A4 paper aspect ratio
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Outlined.PictureAsPdf,
+                    contentDescription = "Document Thumbnail",
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -112,5 +129,5 @@ fun DocumentCard(
 @Preview(name = "DocumentCard Preview", showBackground = true)
 @Composable
 fun Preview_DocumentCard() {
-    DocumentCard(title = "Sample Document With A Very Long Name That Overflows", date = "10/10/2025", pageCount = 3)
+    DocumentCard(title = "Sample Document With A Very Long Name That Overflows", date = "10/10/2025", pageCount = 3, thumbnail = null)
 }

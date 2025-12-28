@@ -2,8 +2,8 @@ package com.example.docscan.ui.navigation
 
 import android.net.Uri
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,37 +12,60 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.docscan.App
 import com.example.docscan.ui.BottomNavItem
 import com.example.docscan.ui.screens.*
+import com.google.accompanist.navigation.animation.AnimatedNavHost
+import com.google.accompanist.navigation.animation.composable
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
+@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class)
 @Composable
 fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifier) {
     val ocrGateway = App.ocrGateway
+    val bottomNavItems = remember { listOf(BottomNavItem.Home, BottomNavItem.Files, BottomNavItem.Tools, BottomNavItem.Profile) }
+
+    fun getIndex(route: String?): Int {
+        return bottomNavItems.indexOfFirst { it.route == route }.takeIf { it != -1 } ?: Int.MAX_VALUE
+    }
 
     Surface(
         modifier = modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        NavHost(
+        AnimatedNavHost(
             navController = navController,
             startDestination = BottomNavItem.Home.route,
-            enterTransition = { fadeIn(animationSpec = tween(300)) },
-            exitTransition = { fadeOut(animationSpec = tween(300)) },
-            popEnterTransition = { fadeIn(animationSpec = tween(300)) },
-            popExitTransition = { fadeOut(animationSpec = tween(300)) }
+            enterTransition = { 
+                val fromIndex = getIndex(initialState.destination.route)
+                val toIndex = getIndex(targetState.destination.route)
+                if (fromIndex < toIndex) {
+                    slideInHorizontally(initialOffsetX = { 1000 }, animationSpec = tween(300))
+                } else {
+                    slideInHorizontally(initialOffsetX = { -1000 }, animationSpec = tween(300))
+                }
+            },
+            exitTransition = { 
+                val fromIndex = getIndex(initialState.destination.route)
+                val toIndex = getIndex(targetState.destination.route)
+                if (fromIndex < toIndex) {
+                    slideOutHorizontally(targetOffsetX = { -1000 }, animationSpec = tween(300))
+                } else {
+                    slideOutHorizontally(targetOffsetX = { 1000 }, animationSpec = tween(300))
+                }
+            },
+            popEnterTransition = { slideInHorizontally(initialOffsetX = { -1000 }, animationSpec = tween(300)) },
+            popExitTransition = { slideOutHorizontally(targetOffsetX = { 1000 }, animationSpec = tween(300)) }
         ) {
             composable(BottomNavItem.Home.route) {
                 HomeScreen(
@@ -59,11 +82,11 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
                     },
                     onImageImport = {
                         val encodedUri = URLEncoder.encode(it.toString(), StandardCharsets.UTF_8.toString())
-                        navController.navigate("scan?imageUri=${'$'}encodedUri")
+                        navController.navigate("scan?imageUri=$encodedUri")
                     },
                     onDocumentImport = {
                         val encodedUri = URLEncoder.encode(it.toString(), StandardCharsets.UTF_8.toString())
-                        navController.navigate("scan?pdfUri=${'$'}encodedUri")
+                        navController.navigate("scan?pdfUri=$encodedUri")
                     },
                     ocrGateway = ocrGateway // Pass the gateway to the HomeScreen
                 )
@@ -75,14 +98,8 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
             composable(
                 route = "scan?imageUri={imageUri}&pdfUri={pdfUri}",
                 arguments = listOf(
-                    navArgument("imageUri") {
-                        type = NavType.StringType
-                        nullable = true
-                    },
-                    navArgument("pdfUri") {
-                        type = NavType.StringType
-                        nullable = true
-                    }
+                    navArgument("imageUri") { type = NavType.StringType; nullable = true },
+                    navArgument("pdfUri") { type = NavType.StringType; nullable = true }
                 )
             ) { backStackEntry ->
                 val imageUri = backStackEntry.arguments?.getString("imageUri")?.let { Uri.parse(it) }
@@ -90,33 +107,22 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
                 ScanScreen(navController, imageUri = imageUri, pdfUri = pdfUri)
             }
 
-            composable(
-                route = "signing"
-            ) { backStackEntry ->
-                val pdfUri = App.pdfToSign
-                if (pdfUri != null) {
+            composable(route = "signing") {
+                if (App.pdfToSign != null) {
                     SigningScreen(navController)
                 } else {
-                    // Handle the case where the URI is null, e.g., navigate back or show an error
                     navController.popBackStack()
                 }
             }
 
-            composable("signature_management") {
-                SignatureManagementScreen(navController = navController)
-            }
-            composable("add_watermark") {
-                AddWatermarkScreen(navController = navController)
-            }
+            composable("signature_management") { SignatureManagementScreen(navController = navController) }
+            composable("add_watermark") { AddWatermarkScreen(navController = navController) }
 
             composable("id_card_scan") {
                 IdCardScanScreen(
                     onScanComplete = { uri ->
                         val encodedUri = URLEncoder.encode(uri.toString(), StandardCharsets.UTF_8.toString())
-                        // Navigate to ScanScreen with the new PDF, and remove IdCardScanScreen from the back stack
-                        navController.navigate("scan?pdfUri=${'$'}encodedUri") {
-                            popUpTo("id_card_scan") { inclusive = true }
-                        }
+                        navController.navigate("scan?pdfUri=$encodedUri") { popUpTo("id_card_scan") { inclusive = true } }
                     }
                 )
             }
@@ -154,10 +160,8 @@ fun PlaceholderScreen(name: String, navController: NavController) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Placeholder: ${'$'}name")
-                Button(onClick = { navController.popBackStack() }) {
-                    Text("Quay lại")
-                }
+                Text("Placeholder: $name")
+                Button(onClick = { navController.popBackStack() }) { Text("Quay lại") }
             }
         }
     }
