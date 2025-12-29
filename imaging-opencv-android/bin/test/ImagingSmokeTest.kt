@@ -18,7 +18,7 @@ class ImagingSmokeTest {
         OpenCV.loadLocally()
 
         val imaging = OpenCvImaging()
-        val bytes = resourceBytes("sample_1.jpg")
+        val bytes = resourceBytes("sample_2.jpg")
 
         val src = imaging.fromBytes(bytes)
         val quad = imaging.detectDocumentQuad(src) ?: error("No document quad detected")

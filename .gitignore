@@ -1,84 +1,73 @@
 # ======================
-# Android / Gradle build
+# Gradle / Android build
 # ======================
-.gradle
 .gradle/
-build/
-/build
-*/build/
-/*/build/
-/pipeline-core/build
+**/build/
 !gradle/wrapper/gradle-wrapper.jar
 
-# ======================
-# Local configuration
-# ======================
-local.properties
-/local.properties
-*.keystore
-*.jks
-*.pem
-
-# ======================
-# IntelliJ / Android Studio
-# ======================
+# Android Studio / IntelliJ
 .idea/
-/.idea
 *.iml
 *.ipr
 *.iws
 out/
 
-# ======================
-# OS generated
-# ======================
-.DS_Store
-Thumbs.db
-ehthumbs.db
-*.stackdump
+# Local machine config / secrets
+local.properties
+*.keystore
+*.jks
+*.pem
+*.der
+.env
+.env.*
 
 # ======================
-# Logs & temp
+# Java / Kotlin / tooling
+# ======================
+**/bin/
+*.class
+hs_err_pid*
+
+# Kotlin/Compose caches
+.kotlin/
+.kotlinc/
+compose_compiler/
+
+# ======================
+# NDK / CMake
+# ======================
+.cxx/
+**/.cxx/
+**/.externalNativeBuild/
+cmake-build-*/
+
+# ======================
+# Logs / temp
 # ======================
 *.log
 *.tmp
 *.temp
 *.cache
-.cache/
-logs/
-captures/
+**/.cache/
+**/logs/
 
 # ======================
-# Test & debug output
+# Test / debug artifacts
 # ======================
-*.apk
-*.ap_
-*.aab
+**/test-output/
+**/outputs/
+**/reports/
+**/captures/
 *.hprof
-*.mp4
 *.trace
-*.json
-*.xml
-*.jpg
-*.png
-test-output/
-outputs/
-reports/
-*.csv
+*.mp4
 
-# ======================
-# Kotlin / Java
-# ======================
-*.class
-*.jar
-*.war
-*.ear
-*.dex
+# If you keep smoke PDFs locally (you have one at repo root)
+docscan_smoke_doc_*.pdf
 
-# ======================
-# Misc tooling
-# ======================
-.vscode/
-.cxx/
-cmake-build-*/
-/pipeline-core/build/
+# OS generated
+.DS_Store
+Thumbs.db
+ehthumbs.db
+*.stackdump
+app/google-services.json
