@@ -12,7 +12,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 class RemoteOcrClientImpl(
-    private val baseUrl: String,                 // e.g. "http://10.0.2.2:4000"
+    private val baseUrl: String,                 //"https://gateway.neirylittlebox.com"
     private val authTokenProvider: () -> String? = {null},// how to get current JWT
     private val client: OkHttpClient = defaultClient
 ) : RemoteOcrClient {
