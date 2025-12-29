@@ -131,7 +131,7 @@ fun FilesScreen(navController: NavHostController? = null) {
                 if (documents.isEmpty()) {
                     item {
                         Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Chưa có tài liệu nào")
+                            Text("Chưa có tài liệu nào", color = Color(0xFF000000))
                         }
                     }
                 } else {

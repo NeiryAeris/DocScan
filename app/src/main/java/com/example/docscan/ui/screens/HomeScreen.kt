@@ -186,7 +186,7 @@ fun HomeScreen(
                 if (documentsState == null) {
                     item { Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
                 } else if (documentsToDisplay.isEmpty()) {
-                    item { Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) { Text(if (committedSearchQuery.isBlank()) "Chưa có tài liệu gần đây" else "Không tìm thấy tài liệu nào") } }
+                    item { Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) { Text(if (committedSearchQuery.isBlank()) "Chưa có tài liệu gần đây" else "Không tìm thấy tài liệu nào", color = Color(0xFF000000)) } }
                 } else {
                     items(documentsToDisplay, key = { it.file.absolutePath }) { doc ->
                         val onClick = remember(doc, context) { { FileOpener.openPdf(context, doc.file) } }
