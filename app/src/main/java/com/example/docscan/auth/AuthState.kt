@@ -1,11 +1,14 @@
 package com.example.docscan.auth
 
 sealed class AuthState {
-    object Idle : AuthState()
     data class SignedIn(
         val uid: String,
+        val displayName: String?,
         val email: String?,
+        val photoUrl: String?,
         val idToken: String
     ) : AuthState()
+
+    object SignedOut : AuthState()
     data class Error(val message: String) : AuthState()
 }

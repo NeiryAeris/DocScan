@@ -6,7 +6,6 @@ import android.graphics.ImageDecoder
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.Build
-import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -35,6 +34,7 @@ import com.example.docscan.ui.components.ActionItemData
 import com.example.docscan.ui.components.SectionTitle
 import com.example.domain.interfaces.ocr.OcrGateway
 import com.example.ocr.core.api.OcrImage
+import com.example.ocr_remote.RemoteHandwritingResult
 import com.itextpdf.text.Document
 import com.itextpdf.text.pdf.PdfCopy
 import com.itextpdf.text.pdf.PdfReader
@@ -42,11 +42,12 @@ import com.itextpdf.text.pdf.parser.PdfTextExtractor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import org.apache.poi.xslf.usermodel.SlideLayout
 import org.apache.poi.xslf.usermodel.XMLSlideShow
 import org.apache.poi.xslf.usermodel.XSLFTextShape
+import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import org.apache.poi.xwpf.usermodel.XWPFDocument
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -67,6 +68,7 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
     var pdfUriToConvertToImage by remember { mutableStateOf<Uri?>(null) }
     var pdfUriToConvertToExcel by remember { mutableStateOf<Uri?>(null) }
     var pdfUrisToMerge by remember { mutableStateOf<List<Uri>?>(null) }
+    var isHandwritingRemovalLoading by remember { mutableStateOf(false) }
 
     val onImageResult = remember(navController) {
         { uri: Uri? ->
@@ -135,6 +137,62 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
             }
         }
     }
+
+    val handwritingRemovalImagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? ->
+            if (uri != null) {
+                scope.launch {
+                    isHandwritingRemovalLoading = true
+                    Toast.makeText(context, "Đang xóa chữ viết tay...", Toast.LENGTH_SHORT).show()
+                    try {
+                        val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        context.contentResolver.takePersistableUriPermission(uri, takeFlags)
+
+                        val result = withContext(Dispatchers.IO) {
+                            val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri))
+                            } else {
+                                @Suppress("DEPRECATION")
+                                MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                            }
+                            val outputStream = ByteArrayOutputStream()
+                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                            val imageBytes = outputStream.toByteArray()
+
+                            App.handwritingClient.removeHandwriting(
+                                pageId = "transient-page-${System.currentTimeMillis()}",
+                                imageBytes = imageBytes,
+                                mimeType = "image/png",
+                                strength = "high"
+                            )
+                        }
+
+                        when (result) {
+                            is RemoteHandwritingResult.ImageBytes -> {
+                                App.previewImageBytes = result.bytes
+                                App.previewTitle = "Xem trước xóa chữ viết tay"
+                                App.previewMimeType = "image/png"
+                                App.previewDefaultFileName = "cleaned-${System.currentTimeMillis()}.png"
+                                navController.navigate("preview_screen")
+                            }
+                            is RemoteHandwritingResult.Error -> {
+                                Toast.makeText(context, "Lỗi: ${result.message}", Toast.LENGTH_LONG).show()
+                            }
+                            else -> {
+                                Toast.makeText(context, "Lỗi không xác định", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        Toast.makeText(context, "Lỗi khi xử lý ảnh: ${e.message}", Toast.LENGTH_LONG).show()
+                    } finally {
+                        isHandwritingRemovalLoading = false
+                    }
+                }
+            }
+        }
+    )
 
     val onSignPdfResult = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -565,8 +623,15 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
         listOf(
             ActionItemData(R.drawable.ky_ten, "Ký tên") { onSignPdfResult.launch(arrayOf("application/pdf")) },
             ActionItemData(R.drawable.them_logo_mo, "Thêm logo mờ") { navController.navigate("add_watermark") },
-            ActionItemData(R.drawable.xoa_thong_minh, "Xóa thông minh") { Toast.makeText(context, "Chức năng đang được phát triển", Toast.LENGTH_SHORT).show() },
-            ActionItemData(R.drawable.hop_nhat_tep_tin, "Hợp nhất tập tin") { mergePdfLauncher.launch(arrayOf("application/pdf")) }
+            ActionItemData(R.drawable.xoa_thong_minh, "Xóa thông minh") { handwritingRemovalImagePickerLauncher.launch("image/*") },
+            ActionItemData(R.drawable.hop_nhat_tep_tin, "Hợp nhất tập tin") { mergePdfLauncher.launch(arrayOf("application/pdf")) },
+            ActionItemData(R.drawable.ic_ai_assistant, "Trợ lý AI") {
+                if (App.isUserLoggedIn) {
+                    navController.navigate("chat")
+                } else {
+                    Toast.makeText(context, "Vui lòng đăng nhập để sử dụng Trợ lý AI", Toast.LENGTH_SHORT).show()
+                }
+            }
         )
     }
 
@@ -621,7 +686,7 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
             )
         }
 
-        if (isOcrLoading || isConverting) {
+        if (isOcrLoading || isConverting || isHandwritingRemovalLoading) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center

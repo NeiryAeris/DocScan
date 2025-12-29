@@ -46,7 +46,7 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
         AnimatedNavHost(
             navController = navController,
             startDestination = BottomNavItem.Home.route,
-            enterTransition = { 
+            enterTransition = {
                 val fromIndex = getIndex(initialState.destination.route)
                 val toIndex = getIndex(targetState.destination.route)
                 if (fromIndex < toIndex) {
@@ -55,7 +55,7 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
                     slideInHorizontally(initialOffsetX = { -1000 }, animationSpec = tween(300))
                 }
             },
-            exitTransition = { 
+            exitTransition = {
                 val fromIndex = getIndex(initialState.destination.route)
                 val toIndex = getIndex(targetState.destination.route)
                 if (fromIndex < toIndex) {
@@ -117,6 +117,8 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
 
             composable("signature_management") { SignatureManagementScreen(navController = navController) }
             composable("add_watermark") { AddWatermarkScreen(navController = navController) }
+            composable("preview_screen") { PreviewScreen(navController = navController) }
+            composable("chat") { ChatScreen(navController = navController) }
 
             composable("id_card_scan") {
                 IdCardScanScreen(
