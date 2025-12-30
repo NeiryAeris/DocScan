@@ -218,7 +218,8 @@ fun UserInfoHeader(state: AuthState.SignedIn, onProfileClick: () -> Unit) {
             Icon(
                 imageVector = Icons.Default.AccountCircle,
                 contentDescription = "Profile picture",
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(48.dp),
+                tint = Color(0xFF7B7E80)
             )
         }
         Spacer(modifier = Modifier.width(16.dp))
@@ -232,11 +233,50 @@ fun UserInfoHeader(state: AuthState.SignedIn, onProfileClick: () -> Unit) {
 @Composable
 fun AccountScreen(navController: NavHostController) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val authManager = remember(context) { GoogleAuthManager(context.findActivity()) }
-    val firebaseUser by rememberUpdatedState(FirebaseAuth.getInstance().currentUser)
     val uriHandler = LocalUriHandler.current
 
+    var authState by remember { mutableStateOf<AuthState>(AuthState.SignedOut) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+
+    // Listen for authentication state changes
+    DisposableEffect(Unit) {
+        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            val firebaseUser = firebaseAuth.currentUser
+            authState = if (firebaseUser != null) {
+                AuthState.SignedIn(
+                    uid = firebaseUser.uid,
+                    displayName = firebaseUser.displayName,
+                    email = firebaseUser.email,
+                    photoUrl = firebaseUser.photoUrl?.toString(),
+                    idToken = "" // Not needed for UI
+                )
+            } else {
+                AuthState.SignedOut
+            }
+        }
+        FirebaseAuth.getInstance().addAuthStateListener(listener)
+        onDispose {
+            FirebaseAuth.getInstance().removeAuthStateListener(listener)
+        }
+    }
+
+    // Launcher for the sign-in intent
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            coroutineScope.launch {
+                val resultState = authManager.handleSignInResult(result.data)
+                if (resultState is AuthState.Error) {
+                    Toast.makeText(context, "Đăng nhập thất bại: ${resultState.message}", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Đăng nhập thành công!", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     val appVersion = remember {
         try {
@@ -247,133 +287,136 @@ fun AccountScreen(navController: NavHostController) {
         }
     }
 
-    // This effect will trigger when the composable enters or when firebaseUser becomes null.
-    // If the user signs out, firebaseUser becomes null, and we pop the back stack.
-    LaunchedEffect(firebaseUser) {
-        if (firebaseUser == null) {
-            navController.popBackStack()
-        }
-    }
-
     AppBackground {
-        Box(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 80.dp) // Space for bottom info
-            ) {
-                item {
-                    firebaseUser?.let { user ->
-                        // This is just a visual header, not the clickable UserInfoHeader
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (user.photoUrl != null) {
-                                AsyncImage(
-                                    model = user.photoUrl.toString(),
-                                    contentDescription = "Profile picture",
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(CircleShape),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.AccountCircle,
-                                    contentDescription = "Profile picture",
-                                    modifier = Modifier.size(48.dp)
-                                )
+        when (val state = authState) {
+            is AuthState.SignedIn -> {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 80.dp) // Space for bottom info
+                    ) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (state.photoUrl != null) {
+                                    AsyncImage(
+                                        model = state.photoUrl,
+                                        contentDescription = "Profile picture",
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .clip(CircleShape),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.AccountCircle,
+                                        contentDescription = "Profile picture",
+                                        modifier = Modifier.size(48.dp),
+                                        tint = Color(0xFF7B7E80)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        state.displayName ?: "User",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp,
+                                        color = Color.Black
+                                    )
+                                    Text(state.email ?: "", fontSize = 14.sp, color = Color.Gray)
+                                }
                             }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    user.displayName ?: "User",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp,
-                                    color = Color.Black
-                                )
-                                Text(user.email ?: "", fontSize = 14.sp, color = Color.Gray)
-                            }
+                        }
+
+                        item { Divider(modifier = Modifier.padding(horizontal = 16.dp)) }
+
+                        // Account Management
+                        item {
+                            ProfileItem(
+                                icon = Icons.Default.Settings,
+                                title = "Quản lý tài khoản Google",
+                                onClick = { uriHandler.openUri("https://myaccount.google.com/") }
+                            )
+                        }
+                        item {
+                            ProfileItem(
+                                icon = Icons.Default.Delete,
+                                title = "Xóa tài khoản",
+                                onClick = { showDeleteDialog = true }
+                            )
+                        }
+
+                        item { Divider(modifier = Modifier.padding(horizontal = 16.dp)) }
+
+                        // Legal
+                        item {
+                            ProfileItem(
+                                icon = Icons.Default.Policy,
+                                title = "Chính sách quyền riêng tư",
+                                onClick = { Toast.makeText(context, "Chưa có liên kết", Toast.LENGTH_SHORT).show() }
+                            )
+                        }
+                        item {
+                            ProfileItem(
+                                icon = Icons.Default.Description,
+                                title = "Điều khoản dịch vụ",
+                                onClick = { Toast.makeText(context, "Chưa có liên kết", Toast.LENGTH_SHORT).show() }
+                            )
+                        }
+
+                        item { Divider(modifier = Modifier.padding(horizontal = 16.dp)) }
+
+                        // Logout
+                        item {
+                            ProfileItem(
+                                icon = Icons.Default.Logout,
+                                title = "Đăng xuất",
+                                onClick = { authManager.signOut() }
+                            )
                         }
                     }
-                }
 
-                item { Divider(modifier = Modifier.padding(horizontal = 16.dp)) }
-
-                // Account Management
-                item {
-                    ProfileItem(
-                        icon = Icons.Default.Settings,
-                        title = "Quản lý tài khoản Google",
-                        onClick = { uriHandler.openUri("https://myaccount.google.com/") }
-                    )
-                }
-                item {
-                    ProfileItem(
-                        icon = Icons.Default.Delete,
-                        title = "Xóa tài khoản",
-                        onClick = { showDeleteDialog = true }
-                    )
-                }
-
-                item { Divider(modifier = Modifier.padding(horizontal = 16.dp)) }
-
-                // Legal
-                item {
-                    ProfileItem(
-                        icon = Icons.Default.Policy,
-                        title = "Chính sách quyền riêng tư",
-                        onClick = { /* Placeholder */
-                            Toast.makeText(context, "Chưa có liên kết", Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                }
-                item {
-                    ProfileItem(
-                        icon = Icons.Default.Description,
-                        title = "Điều khoản dịch vụ",
-                        onClick = {  /* Placeholder */
-                            Toast.makeText(context, "Chưa có liên kết", Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                }
-
-                item { Divider(modifier = Modifier.padding(horizontal = 16.dp)) }
-
-                // Logout
-                item {
-                    ProfileItem(
-                        icon = Icons.Default.Logout,
-                        title = "Đăng xuất",
-                        onClick = { authManager.signOut() }
-                    )
+                    // Bottom Info
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "User ID: ${state.uid}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = "Phiên bản $appVersion",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
-
-            // Bottom Info
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                firebaseUser?.uid?.let { uid ->
-                    Text(
-                        text = "User ID: $uid",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray,
-                        textAlign = TextAlign.Center
-                    )
+            else -> { // SignedOut or Error
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Button(onClick = { launcher.launch(authManager.getSignInIntent()) }) {
+                        Icon(
+                            imageVector = Icons.Default.Login,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        Text("Đăng nhập bằng Google")
+                    }
                 }
-                Text(
-                    text = "Phiên bản $appVersion",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray,
-                    textAlign = TextAlign.Center
-                )
             }
         }
     }
@@ -387,7 +430,7 @@ fun AccountScreen(navController: NavHostController) {
                 Button(
                     onClick = {
                         showDeleteDialog = false
-                        firebaseUser?.delete()?.addOnCompleteListener { task ->
+                        FirebaseAuth.getInstance().currentUser?.delete()?.addOnCompleteListener { task ->
                             if (task.isSuccessful) {
                                 Toast.makeText(context, "Tài khoản đã được xóa.", Toast.LENGTH_SHORT).show()
                             } else {
@@ -419,7 +462,12 @@ fun ProfileItem(icon: ImageVector, title: String, subtitle: String? = null, onCl
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = title, modifier = Modifier.size(24.dp))
+        Icon(
+            icon,
+            contentDescription = title,
+            modifier = Modifier.size(24.dp),
+            tint = Color(0xFF7B7E80)
+        )
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(title, fontSize = 16.sp, color = Color.Black)
