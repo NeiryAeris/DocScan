@@ -4,10 +4,12 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,30 +26,47 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
+import com.example.docscan.App
+import com.example.docscan.R
 import com.example.docscan.auth.AuthState
 import com.example.docscan.auth.GoogleAuthManager
 import com.example.docscan.ui.components.AppBackground
+import com.example.docscan.ui.theme.Theme
+import com.example.docscan.ui.theme.ThemeViewModel
+import com.example.docscan.ui.theme.ThemeViewModelFactory
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(navController: NavHostController) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val authManager = remember(context) { GoogleAuthManager(context.findActivity()) }
+    val uriHandler = LocalUriHandler.current
 
-    var authState by remember { mutableStateOf<AuthState>(AuthState.SignedOut) }
+    val themeViewModel: ThemeViewModel = viewModel(factory = ThemeViewModelFactory(context))
     var showThemeDialog by remember { mutableStateOf(false) }
 
-    // Listen for authentication state changes to handle initial state and sign-out
+    var showFeedbackSheet by remember { mutableStateOf(false) }
+    val feedbackSheetState = rememberModalBottomSheetState()
+
+    var showRatingSheet by remember { mutableStateOf(false) }
+    val ratingSheetState = rememberModalBottomSheetState()
+
+    var authState by remember { mutableStateOf<AuthState>(AuthState.SignedOut) }
+    var isBackupEnabled by remember { mutableStateOf(false) }
+
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             val firebaseUser = firebaseAuth.currentUser
@@ -75,8 +94,6 @@ fun ProfileScreen(navController: NavHostController) {
         if (result.resultCode == Activity.RESULT_OK) {
             coroutineScope.launch {
                 val resultState = authManager.handleSignInResult(result.data)
-                // The AuthStateListener will automatically update the UI.
-                // We just show a toast message and log based on the result.
                 if (resultState is AuthState.SignedIn) {
                     Log.d("ProfileScreen", "Sign-in successful")
                     Toast.makeText(context, "Đăng nhập thành công!", Toast.LENGTH_SHORT).show()
@@ -115,6 +132,50 @@ fun ProfileScreen(navController: NavHostController) {
             }
             item {
                 ProfileItem(
+                    icon = Icons.Default.CloudSync,
+                    title = "Sao lưu & Đồng bộ hóa",
+                    extraContent = {
+                        Switch(
+                            checked = isBackupEnabled,
+                            onCheckedChange = { isEnabled ->
+                                if (isEnabled) {
+                                    coroutineScope.launch {
+                                        try {
+                                            if (authState !is AuthState.SignedIn) {
+                                                Toast.makeText(context, "Vui lòng đăng nhập trước khi bật sao lưu.", Toast.LENGTH_LONG).show()
+                                                return@launch
+                                            }
+
+                                            val status = App.driveClient.status()
+                                            if (status.linked) {
+                                                if (status.folderId == null) {
+                                                    Log.i("ProfileScreen", "Drive linked, initializing app folder...")
+                                                    App.driveClient.initFolder()
+                                                }
+                                                isBackupEnabled = true
+                                                Toast.makeText(context, "Đã bật sao lưu và đồng bộ hóa.", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Log.i("ProfileScreen", "Drive not linked, starting OAuth flow...")
+                                                val oauthStart = App.driveClient.oauthStart()
+                                                uriHandler.openUri(oauthStart.url)
+                                                Toast.makeText(context, "Vui lòng hoàn tất liên kết với Google Drive trong trình duyệt.", Toast.LENGTH_LONG).show()
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e("ProfileScreen", "Failed to enable backup", e)
+                                            Toast.makeText(context, "Lỗi khi bật sao lưu: ${e.message}", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                } else {
+                                    isBackupEnabled = false
+                                    Toast.makeText(context, "Đã tắt sao lưu.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                    }
+                )
+            }
+            item {
+                ProfileItem(
                     icon = Icons.Default.Brightness6,
                     title = "Chủ đề ứng dụng",
                     onClick = { showThemeDialog = true }
@@ -124,14 +185,14 @@ fun ProfileScreen(navController: NavHostController) {
                 ProfileItem(
                     icon = Icons.Default.Feedback,
                     title = "Gửi phản hồi",
-                    onClick = { /* Placeholder for feedback action */ }
+                    onClick = { showFeedbackSheet = true }
                 )
             }
             item {
                 ProfileItem(
                     icon = Icons.Default.Star,
                     title = "Đánh giá ứng dụng",
-                    onClick = { /* Placeholder for rating action */ }
+                    onClick = { showRatingSheet = true }
                 )
             }
             item {
@@ -156,20 +217,162 @@ fun ProfileScreen(navController: NavHostController) {
         ThemeSelectionDialog(
             onDismiss = { showThemeDialog = false },
             onThemeSelected = {
-                // Placeholder to handle theme change
-                Toast.makeText(context, "Chủ đề đã chọn: $it", Toast.LENGTH_SHORT).show()
+                themeViewModel.setTheme(it)
                 showThemeDialog = false
             }
         )
+    }
+
+    if (showFeedbackSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showFeedbackSheet = false },
+            sheetState = feedbackSheetState
+        ) {
+            FeedbackSheetContent(onSend = {
+                feedbackText ->
+                coroutineScope.launch {
+                    feedbackSheetState.hide()
+                }.invokeOnCompletion {
+                    if (!feedbackSheetState.isVisible) {
+                        showFeedbackSheet = false
+                    }
+                }
+                val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
+                    data = Uri.parse("mailto:") // only email apps should handle this
+                    putExtra(Intent.EXTRA_EMAIL, arrayOf("anquan0298@gmail.com"))
+                    putExtra(Intent.EXTRA_SUBJECT, "Phản hồi ứng dụng DocScan")
+                    putExtra(Intent.EXTRA_TEXT, feedbackText)
+                }
+                try {
+                    context.startActivity(Intent.createChooser(emailIntent, "Gửi phản hồi..."))
+                    Toast.makeText(context, "Gửi phản hồi thành công!", Toast.LENGTH_SHORT).show()
+                } catch (e: android.content.ActivityNotFoundException) {
+                    Toast.makeText(context, "Không tìm thấy ứng dụng email.", Toast.LENGTH_SHORT).show()
+                }
+            })
+        }
+    }
+
+    if (showRatingSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showRatingSheet = false },
+            sheetState = ratingSheetState
+        ) {
+            RatingSheetContent(
+                onRateOnPlayStore = {
+                    coroutineScope.launch {
+                        ratingSheetState.hide()
+                    }.invokeOnCompletion {
+                        if (!ratingSheetState.isVisible) {
+                            showRatingSheet = false
+                        }
+                    }
+                    Toast.makeText(context, "Chức năng sẽ sớm ra mắt!", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun RatingSheetContent(onRateOnPlayStore: () -> Unit) {
+    var rating by remember { mutableStateOf(0) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+            .padding(bottom = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        val imageRes = when {
+            rating in 1..2 -> R.drawable.sad
+            rating in 3..4 -> R.drawable.good
+            rating == 5 -> R.drawable.happy
+            else -> null
+        }
+
+        if (imageRes != null) {
+            Image(
+                painter = painterResource(id = imageRes),
+                contentDescription = "Rating feedback emoticon",
+                modifier = Modifier.size(64.dp)
+            )
+            Spacer(Modifier.height(16.dp))
+        }
+
+        Text("Bạn cảm thấy ứng dụng thế nào?", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            (1..5).forEach { index ->
+                Icon(
+                    imageVector = if (index <= rating) Icons.Filled.Star else Icons.Default.StarBorder,
+                    contentDescription = "Star $index",
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clickable { rating = index },
+                    tint = if (index <= rating) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+
+        Button(
+            onClick = onRateOnPlayStore,
+            enabled = rating > 0,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError
+            )
+        ) {
+            Text("Đánh giá trên CH Play")
+        }
+    }
+}
+
+@Composable
+fun FeedbackSheetContent(onSend: (String) -> Unit) {
+    var feedbackText by remember { mutableStateOf("") }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+            .padding(bottom = 32.dp), // Extra padding for the bottom
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Gửi phản hồi", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(16.dp))
+        OutlinedTextField(
+            value = feedbackText,
+            onValueChange = { feedbackText = it },
+            label = { Text("Nội dung phản hồi") },
+            placeholder = { Text("Hãy cho chúng tôi biết suy nghĩ của bạn...") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp), // Larger text area
+            maxLines = 10,
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = { onSend(feedbackText) },
+            enabled = feedbackText.isNotBlank(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Gửi")
+        }
     }
 }
 
 @Composable
 fun ThemeSelectionDialog(
     onDismiss: () -> Unit,
-    onThemeSelected: (String) -> Unit
+    onThemeSelected: (Theme) -> Unit
 ) {
-    val themes = listOf("Sáng", "Tối", "Mặc định hệ thống")
+    val themes = listOf(Theme.LIGHT, Theme.DARK)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Chọn chủ đề") },
@@ -177,7 +380,7 @@ fun ThemeSelectionDialog(
             Column(modifier = Modifier.fillMaxWidth()) {
                 themes.forEach { theme ->
                     Text(
-                        text = theme,
+                        text = if (theme == Theme.LIGHT) "Sáng" else "Tối",
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onThemeSelected(theme) }
@@ -219,13 +422,13 @@ fun UserInfoHeader(state: AuthState.SignedIn, onProfileClick: () -> Unit) {
                 imageVector = Icons.Default.AccountCircle,
                 contentDescription = "Profile picture",
                 modifier = Modifier.size(48.dp),
-                tint = Color(0xFF7B7E80)
+                tint = MaterialTheme.colorScheme.onBackground
             )
         }
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(state.displayName ?: "User", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.Black)
-            Text(state.email ?: "", fontSize = 14.sp, color = Color.Gray)
+            Text(state.displayName ?: "User", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onBackground)
+            Text(state.email ?: "", fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground)
         }
     }
 }
@@ -316,7 +519,7 @@ fun AccountScreen(navController: NavHostController) {
                                         imageVector = Icons.Default.AccountCircle,
                                         contentDescription = "Profile picture",
                                         modifier = Modifier.size(48.dp),
-                                        tint = Color(0xFF7B7E80)
+                                        tint = MaterialTheme.colorScheme.onBackground
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(16.dp))
@@ -325,9 +528,9 @@ fun AccountScreen(navController: NavHostController) {
                                         state.displayName ?: "User",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 18.sp,
-                                        color = Color.Black
+                                        color = MaterialTheme.colorScheme.onBackground
                                     )
-                                    Text(state.email ?: "", fontSize = 14.sp, color = Color.Gray)
+                                    Text(state.email ?: "", fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground)
                                 }
                             }
                         }
@@ -391,13 +594,13 @@ fun AccountScreen(navController: NavHostController) {
                         Text(
                             text = "User ID: ${state.uid}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray,
+                            color = MaterialTheme.colorScheme.onBackground,
                             textAlign = TextAlign.Center
                         )
                         Text(
                             text = "Phiên bản $appVersion",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray,
+                            color = MaterialTheme.colorScheme.onBackground,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -454,7 +657,7 @@ fun AccountScreen(navController: NavHostController) {
 }
 
 @Composable
-fun ProfileItem(icon: ImageVector, title: String, subtitle: String? = null, onClick: () -> Unit = {}) {
+fun ProfileItem(icon: ImageVector, title: String, subtitle: String? = null, onClick: () -> Unit = {}, extraContent: @Composable () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -466,14 +669,16 @@ fun ProfileItem(icon: ImageVector, title: String, subtitle: String? = null, onCl
             icon,
             contentDescription = title,
             modifier = Modifier.size(24.dp),
-            tint = Color(0xFF7B7E80)
+            tint = MaterialTheme.colorScheme.onBackground
         )
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 16.sp, color = Color.Black)
+            Text(title, fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
         }
         if (subtitle != null) {
             Text(subtitle, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+        } else {
+            extraContent()
         }
     }
 }

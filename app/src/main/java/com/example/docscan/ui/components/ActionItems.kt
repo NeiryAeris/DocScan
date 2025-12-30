@@ -82,7 +82,7 @@ fun ActionGridItem(item: ActionItemData) {
         )
 
         Spacer(modifier = Modifier.height(8.dp))
-        Text(text = item.label, fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 16.sp, color = Color.Black)
+        Text(text = item.label, fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onBackground)
     }
 }
 
@@ -96,10 +96,10 @@ fun SectionTitle(title: String, actionText: String? = null, onActionClick: (() -
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = title, style = MaterialTheme.typography.titleLarge, color = Color.Black)
+        Text(text = title, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
         if (actionText != null && onActionClick != null) {
             TextButton(onClick = onActionClick) {
-                Text(actionText, color = Color.Black, fontSize = 14.sp)
+                Text(actionText, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
             }
         }
     }

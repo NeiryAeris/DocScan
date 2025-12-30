@@ -10,7 +10,6 @@ import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -20,8 +19,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -31,6 +28,7 @@ import com.example.docscan.App
 import com.example.docscan.R
 import com.example.docscan.ui.components.ActionGrid
 import com.example.docscan.ui.components.ActionItemData
+import com.example.docscan.ui.components.AppBackground
 import com.example.docscan.ui.components.SectionTitle
 import com.example.domain.interfaces.ocr.OcrGateway
 import com.example.ocr.core.api.OcrImage
@@ -637,36 +635,19 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
 
     val onDismissDialog = remember { { extractedText = null } }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFFA9FFF8),
-                        Color(0xFFF4FAFE),
-                        Color(0xFFFFFFFF)
-                    )
-                )
-            )
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = Color.Transparent
-        ) {
-            LazyColumn(modifier = Modifier.padding(bottom = 16.dp)) {
-                item { SectionTitle("Quét") }
-                item { ActionGrid(scanActions) }
+    AppBackground {
+        LazyColumn(modifier = Modifier.padding(bottom = 16.dp)) {
+            item { SectionTitle("Quét") }
+            item { ActionGrid(scanActions) }
 
-                item { SectionTitle("Nhập") }
-                item { ActionGrid(importActions) }
+            item { SectionTitle("Nhập") }
+            item { ActionGrid(importActions) }
 
-                item { SectionTitle("Chuyển đổi") }
-                item { ActionGrid(convertActions) }
+            item { SectionTitle("Chuyển đổi") }
+            item { ActionGrid(convertActions) }
 
-                item { SectionTitle("Sửa") }
-                item { ActionGrid(editActions) }
-            }
+            item { SectionTitle("Sửa") }
+            item { ActionGrid(editActions) }
         }
 
         if (extractedText != null) {

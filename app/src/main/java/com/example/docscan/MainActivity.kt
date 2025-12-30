@@ -17,6 +17,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,11 +26,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.rememberNavController
 import com.example.docscan.logic.storage.AppStorage
 import com.example.docscan.ui.MainScreen
 import com.example.docscan.ui.navigation.AppNavigation
 import com.example.docscan.ui.theme.DocScanTheme
+import com.example.docscan.ui.theme.Theme
+import com.example.docscan.ui.theme.ThemeViewModel
+import com.example.docscan.ui.theme.ThemeViewModelFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -39,7 +44,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            DocScanTheme(darkTheme = true) {
+            val themeViewModel: ThemeViewModel = viewModel(factory = ThemeViewModelFactory(this))
+            val theme by themeViewModel.theme.collectAsState()
+            val darkTheme = theme == Theme.DARK
+
+            DocScanTheme(darkTheme = darkTheme, dynamicColor = false) {
                 val scope = rememberCoroutineScope()
                 var hasStoragePermission by remember {
                     mutableStateOf(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
