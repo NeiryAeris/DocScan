@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -10,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.docscan"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -59,6 +61,9 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.activity.compose)
 
+    // Accompanist
+    implementation("com.google.accompanist:accompanist-navigation-animation:0.32.0")
+
     // Tooling for @Preview
     implementation(libs.androidx.ui.tooling.preview)   // gives you @Preview annotation
     debugImplementation(libs.androidx.ui.tooling)      // interactive preview in Android Studio
@@ -75,6 +80,7 @@ dependencies {
     // Core AndroidX
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.3")
 
     // Testing
     testImplementation(libs.junit)
@@ -90,9 +96,19 @@ dependencies {
 
     //File ops
     implementation(libs.itextg)
+    implementation("org.apache.poi:poi-ooxml:5.2.5")
+    implementation("androidx.documentfile:documentfile:1.0.1")
     implementation(libs.androidx.navigation.compose)
     implementation(libs.material)
     implementation(libs.androidx.material.icons.extended.android)
     implementation(libs.kotlinx.coroutines.android)
 
+    // Firebase Auth
+    implementation(platform("com.google.firebase:firebase-bom:34.7.0"))
+    implementation ("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-analytics")
+
+    // Google Sign In
+    implementation ("com.google.android.gms:play-services-auth:21.1.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 }

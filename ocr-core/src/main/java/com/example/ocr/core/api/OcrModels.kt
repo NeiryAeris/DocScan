@@ -1,5 +1,7 @@
 package com.example.ocr.core.api
 
+typealias AuthTokenProvider = () -> String?
+
 data class OcrWord(val text: String, val bbox: IntArray, val conf: Float?)
 data class OcrPageResult(
     val pageNo: Int,

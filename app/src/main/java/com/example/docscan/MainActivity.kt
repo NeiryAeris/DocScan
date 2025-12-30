@@ -11,16 +11,27 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.navigation.compose.rememberNavController
 import com.example.docscan.logic.storage.AppStorage
 import com.example.docscan.ui.MainScreen
+import com.example.docscan.ui.navigation.AppNavigation
 import com.example.docscan.ui.theme.DocScanTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -29,8 +40,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             DocScanTheme(darkTheme = true) {
+                val scope = rememberCoroutineScope()
                 var hasStoragePermission by remember {
-                    // On Android Q (29) and above, we don't need legacy storage permissions
                     mutableStateOf(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 }
 
@@ -39,15 +50,15 @@ class MainActivity : ComponentActivity() {
                     onResult = { granted ->
                         if (granted) {
                             hasStoragePermission = true
-                            // Attempt to create directory again after permission is granted
-                            AppStorage.getPublicAppDir()
+                            scope.launch(Dispatchers.IO) {
+                                AppStorage.getPublicAppDir()
+                            }
                         } else {
                             Toast.makeText(this, "Storage permission is required to save files.", Toast.LENGTH_LONG).show()
                         }
                     }
                 )
 
-                // Request storage permission on startup if needed (for older Android versions)
                 LaunchedEffect(Unit) {
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                         when (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
@@ -60,11 +71,9 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // If permission is already available, create the directory
                     if (hasStoragePermission) {
-                       val appDir = AppStorage.getPublicAppDir()
+                        val appDir = AppStorage.getPublicAppDir()
                         if (appDir == null) {
-                            // This might happen on some devices or if storage is corrupted
                             Toast.makeText(this@MainActivity, "Failed to create app directory.", Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -75,9 +84,11 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     if (hasStoragePermission) {
-                        MainScreen()
+                        val navController = rememberNavController()
+                        MainScreen(navController = navController) {
+                            AppNavigation(navController = navController, modifier = Modifier.padding(it))
+                        }
                     } else {
-                        // Show a placeholder screen while waiting for permission
                         Box(contentAlignment = Alignment.Center) {
                             Text("Requesting storage permission...")
                         }

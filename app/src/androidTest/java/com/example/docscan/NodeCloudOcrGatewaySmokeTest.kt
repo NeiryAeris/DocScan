@@ -29,8 +29,8 @@ class NodeCloudOcrGatewaySmokeTest {
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEiLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20iLCJpYXQiOjE3NjU4OTE5MTEsImV4cCI6MTc2NjQ5NjcxMX0.5UL4rGDR3TepmMBsi0pS97MHfhutpWcjGn8v4l93Q84"
 
     private val remoteClient: RemoteOcrClient = RemoteOcrClientImpl(
-        baseUrl = baseUrl,
-        authTokenProvider = { authToken }
+        baseUrl = baseUrl
+//        authTokenProvider = { authToken }
     )
 
     private val cloudGateway: CloudOcrGateway = NodeCloudOcrGateway(remoteClient)

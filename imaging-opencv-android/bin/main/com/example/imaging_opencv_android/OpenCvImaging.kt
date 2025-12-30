@@ -496,33 +496,52 @@ class OpenCvImaging(private val cfg: ImagingConfig = ImagingConfig()) : Imaging 
             // Color with mask compositing (white background), edge-preserving
             "color_pro" -> {
                 val s = requireMat(src)
-                // Denoise (edge-preserving)
-                val den = Mat()
-                Photo.fastNlMeansDenoisingColored(s, den, 3f, 7f, 7, 21)
-                // Light sharpen on color
-                val blur = Mat()
-                Imgproc.GaussianBlur(den, blur, Size(0.0, 0.0), 1.0)
-                val sharp = Mat()
-                Core.addWeighted(den, 1.4, blur, -0.4, 0.0, sharp)
-                // Mask from adaptive threshold on gray (block size scales)
-                val g = toGrayOwned(den)
-                val minDim = min(s.width(), s.height())
-                val block = ensureOddPositive(max(21, minDim / 40))
-                val mask = Mat()
-                Imgproc.adaptiveThreshold(g, mask, 255.0,
-                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY, block, 10.0)
-                // Refine mask (close)
-                val k = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(5.0, 5.0))
-                val maskClosed = Mat()
-                Imgproc.morphologyEx(mask, maskClosed, Imgproc.MORPH_CLOSE, k)
-                // Composite onto white
-                val white = Mat(s.size(), s.type(), Scalar(255.0, 255.0, 255.0))
-                val comp = white.clone()
-                sharp.copyTo(comp, maskClosed)
-                // release
-                white.release(); den.release(); blur.release(); g.release(); mask.release(); maskClosed.release()
-                newRefFor(comp)
+
+                // 1. Convert to LAB
+                val lab = Mat()
+                Imgproc.cvtColor(s, lab, Imgproc.COLOR_BGR2Lab)
+
+                val channels = mutableListOf<Mat>()
+                Core.split(lab, channels)
+                val L = channels[0]
+
+                // 2. Background normalization on L only
+                val minDim = min(L.width(), L.height())
+                val bgK = ensureOddPositive(max(31, minDim / cfg.enhance.autoPro.medianKFactor))
+
+                val bg = Mat()
+                Imgproc.medianBlur(L, bg, bgK)
+
+                val normL = Mat()
+                Core.divide(L, bg, normL, 255.0)
+
+                // 3. Gentle CLAHE
+                val clahe = Imgproc.createCLAHE().apply {
+                    clipLimit = cfg.enhance.autoPro.claheClip
+                    tilesGridSize = Size(
+                        cfg.enhance.autoPro.claheTiles.toDouble(),
+                        cfg.enhance.autoPro.claheTiles.toDouble()
+                    )
+                }
+
+                val claL = Mat()
+                clahe.apply(normL, claL)
+
+                // 4. Replace L channel
+                claL.copyTo(channels[0])
+                Core.merge(channels, lab)
+
+                // 5. Back to BGR
+                val out = Mat()
+                Imgproc.cvtColor(lab, out, Imgproc.COLOR_Lab2BGR)
+
+                // cleanup
+                channels.forEach { it.release() }
+                lab.release(); bg.release(); normL.release(); claL.release()
+
+                newRefFor(out)
             }
+
 
             // Black & White with dynamic block size
             "bw_pro" -> {

@@ -1,13 +1,18 @@
 package com.example.docscan.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -19,21 +24,19 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.PictureAsPdf
 
 data class ActionItemData(
-    val icon: ImageVector,
+    val icon: Any,
     val label: String,
-    val backgroundColor: Color? = null, // Giữ nguyên
-    val iconTintColor: Color? = null,   // Giữ nguyên
+    val backgroundColor: Color? = null, // Giữ lại để tương thích, nhưng sẽ không được sử dụng
+    val iconTintColor: Color? = null,   // Giữ lại để tương thích
     val onClick: () -> Unit = {}
 )
 
 @Composable
 fun ActionGrid(items: List<ActionItemData>, columnCount: Int = 4) {
-    // Sử dụng Column thay vì LazyVerticalGrid
     Column(
         modifier = Modifier.padding(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        // Chia danh sách các mục thành các hàng
         items.chunked(columnCount).forEach { rowItems ->
             Row(
                 modifier = Modifier
@@ -41,13 +44,11 @@ fun ActionGrid(items: List<ActionItemData>, columnCount: Int = 4) {
                     .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Hiển thị từng mục trong hàng
                 for (item in rowItems) {
                     Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
                         ActionGridItem(item)
                     }
                 }
-                // Thêm các Spacer để căn chỉnh hàng cuối nếu không đủ mục
                 if (rowItems.size < columnCount) {
                     for (i in 0 until (columnCount - rowItems.size)) {
                         Spacer(modifier = Modifier.weight(1f))
@@ -60,40 +61,28 @@ fun ActionGrid(items: List<ActionItemData>, columnCount: Int = 4) {
 
 @Composable
 fun ActionGridItem(item: ActionItemData) {
-    // Xác định màu sắc để sử dụng
-    val surfaceColor = item.backgroundColor ?: MaterialTheme.colorScheme.surfaceVariant
-
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
         modifier = Modifier.clickable { item.onClick() }
     ) {
-        // Áp dụng màu nền (sẽ là màu default 'surfaceVariant' nếu item.backgroundColor là null)
-        Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = surfaceColor, // <-- Sử dụng màu nền
-            modifier = Modifier.size(48.dp)
-        ) {
-            // Áp dụng màu icon tùy chỉnh
-            val iconTint = item.iconTintColor
-            if (iconTint != null) {
-                Icon(
-                    item.icon,
-                    contentDescription = item.label,
-                    modifier = Modifier.padding(12.dp),
-                    tint = iconTint // <-- Áp dụng màu icon
-                )
-            } else {
-                Icon(
-                    item.icon,
-                    contentDescription = item.label,
-                    modifier = Modifier.padding(12.dp)
-                    // (Sử dụng màu icon mặc định 'onSurfaceVariant')
-                )
-            }
+        val painter = when (item.icon) {
+            is ImageVector -> rememberVectorPainter(image = item.icon)
+            is Int -> painterResource(id = item.icon)
+            else -> throw IllegalArgumentException("Unsupported icon type for ActionItemData")
         }
+
+        Image(
+            painter = painter,
+            contentDescription = item.label,
+            modifier = Modifier
+                .size(48.dp)
+                .clip(MaterialTheme.shapes.medium),
+            contentScale = ContentScale.Fit // <-- Đã sửa lại thành Fit
+        )
+
         Spacer(modifier = Modifier.height(8.dp))
-        Text(text = item.label, fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 16.sp)
+        Text(text = item.label, fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 16.sp, color = Color.Black)
     }
 }
 
@@ -107,10 +96,10 @@ fun SectionTitle(title: String, actionText: String? = null, onActionClick: (() -
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = title, style = MaterialTheme.typography.titleLarge)
+        Text(text = title, style = MaterialTheme.typography.titleLarge, color = Color.Black)
         if (actionText != null && onActionClick != null) {
             TextButton(onClick = onActionClick) {
-                Text(actionText, color = Color.Gray, fontSize = 14.sp)
+                Text(actionText, color = Color.Black, fontSize = 14.sp)
             }
         }
     }

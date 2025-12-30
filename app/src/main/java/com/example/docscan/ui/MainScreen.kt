@@ -1,45 +1,28 @@
 package com.example.docscan.ui
 
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
-import com.example.docscan.ui.screens.FilesScreen
-import com.example.docscan.ui.screens.HomeScreen
-import com.example.docscan.ui.screens.ProfileScreen
-import com.example.docscan.ui.screens.ScanScreen
-import com.example.docscan.ui.screens.ToolsScreen
+import com.example.docscan.R
 
-sealed class BottomNavItem(val route: String, val label: String, val icon: ImageVector) {
-    object Home : BottomNavItem("home", "Trang chủ", Icons.Default.Home)
-    object Files : BottomNavItem("files", "Tài liệu", Icons.Default.Folder)
-    object Tools : BottomNavItem("tools", "Công cụ", Icons.Default.Build)
-    object Profile : BottomNavItem("profile", "Cá nhân", Icons.Default.Person)
+sealed class BottomNavItem(val route: String, val label: String, @DrawableRes val iconResId: Int) {
+    object Home : BottomNavItem("home", "Trang chủ", R.drawable.home)
+    object Files : BottomNavItem("files", "Tài liệu", R.drawable.file)
+    object Tools : BottomNavItem("tools", "Công cụ", R.drawable.tool)
+    object Profile : BottomNavItem("profile", "Cá nhân", R.drawable.profile)
 }
 
 @Composable
-fun MainScreen() {
-    val navController = rememberNavController()
-
-    // Sử dụng remember để tránh tạo lại danh sách mỗi lần recompose
+fun MainScreen(navController: NavHostController, content: @Composable (PaddingValues) -> Unit) {
     val items = remember {
         listOf(
             BottomNavItem.Home,
@@ -51,19 +34,24 @@ fun MainScreen() {
 
     Scaffold(
         bottomBar = {
-            // Chỉ hiện BottomBar khi ở các màn hình chính
             val navBackStackEntry by navController.currentBackStackEntryAsState()
             val currentRoute = navBackStackEntry?.destination?.route
             val isMainScreen = items.any { it.route == currentRoute }
 
             if (isMainScreen) {
-                NavigationBar {
+                NavigationBar(containerColor = Color(0xFFCCFCFA)) {
                     val currentDestination = navBackStackEntry?.destination
                     items.forEach { screen ->
+                        val isSelected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
                         NavigationBarItem(
-                            icon = { Icon(screen.icon, contentDescription = null) },
+                            icon = { 
+                                Icon(
+                                    painter = painterResource(id = screen.iconResId), 
+                                    contentDescription = screen.label
+                                )
+                             },
                             label = { Text(screen.label) },
-                            selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
+                            selected = isSelected,
                             onClick = {
                                 navController.navigate(screen.route) {
                                     popUpTo(navController.graph.findStartDestination().id) {
@@ -72,62 +60,19 @@ fun MainScreen() {
                                     launchSingleTop = true
                                     restoreState = true
                                 }
-                            }
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color(0xFF2F7E77),
+                                unselectedIconColor = Color(0xFF9E9E9E),
+                                selectedTextColor = Color(0xFF2F7E77),
+                                unselectedTextColor = Color(0xFF9E9E9E),
+                                indicatorColor = Color.Transparent
+                            )
                         )
                     }
                 }
             }
-        }
-    ) { innerPadding ->
-        // Sử dụng Surface làm nền để tránh hiện tượng trong suốt (nhìn xuyên thấu màn hình cũ)
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            NavHost(
-                navController = navController,
-                startDestination = BottomNavItem.Home.route,
-                enterTransition = { fadeIn(animationSpec = tween(200)) },
-                exitTransition = { fadeOut(animationSpec = tween(200)) },
-                popEnterTransition = { fadeIn(animationSpec = tween(200)) },
-                popExitTransition = { fadeOut(animationSpec = tween(200)) }
-            ) {
-                // Các màn hình chính (Tab)
-                composable(BottomNavItem.Home.route) { 
-                    HomeScreen(
-                        onScanClick = {
-                            navController.navigate("scan")
-                        }
-                    ) 
-                }
-                composable(BottomNavItem.Files.route) { FilesScreen(navController) }
-                composable(BottomNavItem.Tools.route) { ToolsScreen(navController) }
-                composable(BottomNavItem.Profile.route) { ProfileScreen(navController) }
-
-                // Màn hình chức năng
-                composable("scan") { ScanScreen(navController) }
-                
-                // Placeholder cho các màn hình chưa có hoặc đã xóa logic cũ
-                composable("text_extraction") { PlaceholderScreen("Text Extraction (Removed)", navController) }
-                composable("import_image") { PlaceholderScreen("Import Image Screen", navController) }
-                composable("pdf_tools") { PlaceholderScreen("PDF Tools Screen", navController) }
-            }
-        }
-    }
-}
-
-@Composable
-fun PlaceholderScreen(name: String, navController: androidx.navigation.NavController) {
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        androidx.compose.foundation.layout.Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
-            androidx.compose.foundation.layout.Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
-                Text("Placeholder: $name")
-                Button(onClick = { navController.popBackStack() }) {
-                    Text("Go Back")
-                }
-            }
-        }
-    }
+        },
+        content = content
+    )
 }

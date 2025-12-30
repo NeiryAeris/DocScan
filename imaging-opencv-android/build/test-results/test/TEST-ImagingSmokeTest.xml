@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="ImagingSmokeTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2025-10-23T17:46:46.222Z" hostname="GARDEN" time="6.627">
-  <properties/>
-  <testcase name="runEndToEnd" classname="ImagingSmokeTest" time="6.627"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
