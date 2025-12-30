@@ -94,6 +94,7 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
             composable(BottomNavItem.Files.route) { FilesScreen(navController) }
             composable(BottomNavItem.Tools.route) { ToolsScreen(navController, ocrGateway = ocrGateway) }
             composable(BottomNavItem.Profile.route) { ProfileScreen(navController) }
+            composable("account") { AccountScreen(navController) }
 
             composable(
                 route = "scan?imageUri={imageUri}&pdfUri={pdfUri}",

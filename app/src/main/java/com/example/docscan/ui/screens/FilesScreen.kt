@@ -109,7 +109,18 @@ fun FilesScreen(navController: NavHostController? = null) {
                         IconButton(onClick = { /*TODO: Grid/List toggle*/ }) { Icon(Icons.Default.GridView, contentDescription = "Grid View") }
                         IconButton(onClick = { selectionMode = true }) { Icon(Icons.Default.Check, contentDescription = "Select") }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    titleContentColor = Color.Black,
+                    navigationIconContentColor = Color.Black,
+                    actionIconContentColor = Color.Black
+                ),
+                modifier = Modifier.background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color(0xFF26AAE2), Color(0xFF26E2BC))
+                    )
+                )
             )
         }
     ) { paddingValues ->

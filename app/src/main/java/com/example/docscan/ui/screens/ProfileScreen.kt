@@ -1,6 +1,8 @@
 package com.example.docscan.ui.screens
 
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.util.Log
 import android.widget.Toast
@@ -40,7 +42,7 @@ import kotlinx.coroutines.launch
 fun ProfileScreen(navController: NavHostController) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val authManager = remember { GoogleAuthManager(context as Activity) }
+    val authManager = remember(context) { GoogleAuthManager(context.findActivity()) }
 
     var authState by remember { mutableStateOf<AuthState>(AuthState.SignedOut) }
     var showThemeDialog by remember { mutableStateOf(false) }
@@ -100,42 +102,6 @@ fun ProfileScreen(navController: NavHostController) {
                             onClick = { navController.navigate("account") }
                         )
                     }
-                    item {
-                        ProfileItem(
-                            icon = Icons.Default.Brightness6,
-                            title = "Chủ đề ứng dụng",
-                            onClick = { showThemeDialog = true }
-                        )
-                    }
-                    item {
-                        ProfileItem(
-                            icon = Icons.Default.Feedback,
-                            title = "Gửi phản hồi",
-                            onClick = { /* Placeholder for feedback action */ }
-                        )
-                    }
-                    item {
-                        ProfileItem(
-                            icon = Icons.Default.Star,
-                            title = "Đánh giá ứng dụng",
-                            onClick = { /* Placeholder for rating action */ }
-                        )
-                    }
-                    item {
-                        ProfileItem(
-                            icon = Icons.Default.Share,
-                            title = "Mời bạn bè",
-                            onClick = {
-                                val sendIntent: Intent = Intent().apply {
-                                    action = Intent.ACTION_SEND
-                                    putExtra(Intent.EXTRA_TEXT, "Check out this amazing document scanner app! [App Link]")
-                                    type = "text/plain"
-                                }
-                                val shareIntent = Intent.createChooser(sendIntent, null)
-                                context.startActivity(shareIntent)
-                            }
-                        )
-                    }
                 }
                 else -> { // Covers SignedOut and Error states
                     item {
@@ -146,6 +112,42 @@ fun ProfileScreen(navController: NavHostController) {
                         )
                     }
                 }
+            }
+            item {
+                ProfileItem(
+                    icon = Icons.Default.Brightness6,
+                    title = "Chủ đề ứng dụng",
+                    onClick = { showThemeDialog = true }
+                )
+            }
+            item {
+                ProfileItem(
+                    icon = Icons.Default.Feedback,
+                    title = "Gửi phản hồi",
+                    onClick = { /* Placeholder for feedback action */ }
+                )
+            }
+            item {
+                ProfileItem(
+                    icon = Icons.Default.Star,
+                    title = "Đánh giá ứng dụng",
+                    onClick = { /* Placeholder for rating action */ }
+                )
+            }
+            item {
+                ProfileItem(
+                    icon = Icons.Default.Share,
+                    title = "Mời bạn bè",
+                    onClick = {
+                        val sendIntent: Intent = Intent().apply {
+                            action = Intent.ACTION_SEND
+                            putExtra(Intent.EXTRA_TEXT, "Check out this amazing document scanner app! [App Link]")
+                            type = "text/plain"
+                        }
+                        val shareIntent = Intent.createChooser(sendIntent, null)
+                        context.startActivity(shareIntent)
+                    }
+                )
             }
         }
     }
@@ -230,7 +232,7 @@ fun UserInfoHeader(state: AuthState.SignedIn, onProfileClick: () -> Unit) {
 @Composable
 fun AccountScreen(navController: NavHostController) {
     val context = LocalContext.current
-    val authManager = remember { GoogleAuthManager(context as Activity) }
+    val authManager = remember(context) { GoogleAuthManager(context.findActivity()) }
     val firebaseUser by rememberUpdatedState(FirebaseAuth.getInstance().currentUser)
     val uriHandler = LocalUriHandler.current
 
@@ -432,4 +434,15 @@ fun ProfileItem(icon: ImageVector, title: String, subtitle: String? = null, onCl
 @Composable
 fun Preview_ProfileScreen() {
     ProfileScreen(navController = rememberNavController())
+}
+
+private fun Context.findActivity(): Activity {
+    var currentContext = this
+    while (currentContext is ContextWrapper) {
+        if (currentContext is Activity) {
+            return currentContext
+        }
+        currentContext = currentContext.baseContext
+    }
+    throw IllegalStateException("An Activity was not found in the context hierarchy.")
 }

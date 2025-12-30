@@ -1,6 +1,11 @@
 package com.example.docscan.ui.screens
 
+import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,7 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.example.docscan.App
@@ -63,11 +69,49 @@ fun ChatScreen(navController: NavHostController) {
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? ->
             uri?.let {
-                // For now, just show a toast. In the future, we can handle the file.
                 Toast.makeText(context, "Tệp đã chọn: $it", Toast.LENGTH_LONG).show()
             }
         }
     )
+
+    val speechRecognizerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data: Intent? = result.data
+            val results = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            prompt = results?.get(0) ?: ""
+        }
+    }
+
+    val requestPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "Nói để bắt đầu trò chuyện...")
+            }
+            speechRecognizerLauncher.launch(intent)
+        } else {
+            Toast.makeText(context, "Quyền ghi âm đã bị từ chối.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun startVoiceRecognition() {
+        when (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)) {
+            PackageManager.PERMISSION_GRANTED -> {
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Nói để bắt đầu trò chuyện...")
+                }
+                speechRecognizerLauncher.launch(intent)
+            }
+            else -> {
+                requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
+    }
 
     fun sendMessage() {
         if (prompt.isNotBlank() && !isLoading) {
@@ -78,7 +122,7 @@ fun ChatScreen(navController: NavHostController) {
             isLoading = true
 
             scope.launch {
-                val result = chatClient.ask(prompt = currentPrompt, history = messages.dropLast(1)) // Don't include the latest message in history
+                val result = chatClient.ask(prompt = currentPrompt, history = messages.dropLast(1))
                 val responseMessage = when (result) {
                     is RemoteChatResult.Success -> ChatMessageDto(role = "model", text = result.response)
                     is RemoteChatResult.Error -> ChatMessageDto(role = "model", text = "Error: ${result.message}")
@@ -109,62 +153,7 @@ fun ChatScreen(navController: NavHostController) {
                 reverseLayout = true
             ) {
                 items(messages.reversed()) { message ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = if (message.role == "user") Arrangement.End else Arrangement.Start,
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        if (message.role == "model") {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_ai_assistant),
-                                contentDescription = "AI Avatar",
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape),
-                                tint = Color.Unspecified
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = message.text,
-                                color = Color.Black,
-                                modifier = Modifier.padding(12.dp)
-                            )
-                        }
-
-                        if (message.role == "user") {
-                            Text(
-                                text = message.text,
-                                color = Color.White,
-                                modifier = Modifier
-                                    .background(
-                                        brush = Brush.horizontalGradient(
-                                            colors = listOf(Color(0xFF6366F1), Color(0xFFA855F7))
-                                        ),
-                                        shape = MaterialTheme.shapes.medium
-                                    )
-                                    .padding(12.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            if (firebaseUser?.photoUrl != null) {
-                                AsyncImage(
-                                    model = firebaseUser.photoUrl.toString(),
-                                    contentDescription = "User Avatar",
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.AccountCircle,
-                                    contentDescription = "User Avatar",
-                                    modifier = Modifier.size(40.dp),
-                                    tint = Color.Gray
-                                )
-                            }
-                        }
-                    }
+                    ChatMessageItem(message = message, firebaseUser)
                 }
             }
             if (isLoading) {
@@ -174,7 +163,11 @@ fun ChatScreen(navController: NavHostController) {
                         .padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    CircularProgressIndicator()
+                    Text(
+                        text = "Trợ lí đang phản hồi...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray
+                    )
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -197,6 +190,13 @@ fun ChatScreen(navController: NavHostController) {
                         cursorColor = Color.Black
                     )
                 )
+                IconButton(onClick = { startVoiceRecognition() }, enabled = !isLoading) {
+                    Icon(
+                        imageVector = Icons.Default.Mic,
+                        contentDescription = "Ghi âm giọng nói",
+                        tint = Color.Gray
+                    )
+                }
                 Spacer(modifier = Modifier.width(8.dp))
                 IconButton(onClick = { sendMessage() }, enabled = !isLoading && prompt.isNotBlank()) {
                     Icon(
@@ -205,6 +205,67 @@ fun ChatScreen(navController: NavHostController) {
                         tint = Color.Unspecified
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun ChatMessageItem(message: ChatMessageDto, firebaseUser: com.google.firebase.auth.FirebaseUser?) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = if (message.role == "user") Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        if (message.role == "model") {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_ai_assistant),
+                contentDescription = "AI Avatar",
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape),
+                tint = Color.Unspecified
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = message.text,
+                color = Color.Black,
+                modifier = Modifier.padding(12.dp)
+            )
+        }
+
+        if (message.role == "user") {
+            Text(
+                text = message.text,
+                color = Color.White,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(Color(0xFF6366F1), Color(0xFFA855F7))
+                        ),
+                        shape = MaterialTheme.shapes.medium
+                    )
+                    .padding(12.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            if (firebaseUser?.photoUrl != null) {
+                AsyncImage(
+                    model = firebaseUser.photoUrl.toString(),
+                    contentDescription = "User Avatar",
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = "User Avatar",
+                    modifier = Modifier.size(40.dp),
+                    tint = Color.Gray
+                )
             }
         }
     }
