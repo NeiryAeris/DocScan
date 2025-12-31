@@ -8,12 +8,9 @@ import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -21,26 +18,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.example.docscan.R
 import com.example.docscan.logic.storage.DocumentRepository
 import com.example.docscan.logic.utils.FileOpener
 import com.example.docscan.logic.utils.PdfThumbnailGenerator
-import com.example.docscan.ui.components.ActionGrid
-import com.example.docscan.ui.components.ActionItemData
-import com.example.docscan.ui.components.DocumentCard
-import com.example.docscan.ui.components.SectionTitle
+import com.example.docscan.ui.components.*
 import com.example.domain.interfaces.ocr.OcrGateway
 import com.example.domain.types.Document
 import com.example.ocr.core.api.OcrImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.material3.MaterialTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,7 +45,6 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val keyboardController = LocalSoftwareKeyboardController.current
 
     var extractedText by remember { mutableStateOf<String?>(null) }
     var isOcrLoading by remember { mutableStateOf(false) }
@@ -118,21 +108,12 @@ fun HomeScreen(
     val documentPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent(), onDocumentResult)
     val ocrImagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent(), onOcrImageResult)
 
-    var searchQuery by remember { mutableStateOf("") }
-    var committedSearchQuery by remember { mutableStateOf("") }
-
     val documentsState by DocumentRepository.documents.collectAsState(initial = null)
     var thumbnails by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
 
-    val documentsToDisplay by remember(documentsState, committedSearchQuery) {
+    val documentsToDisplay by remember(documentsState) {
         derivedStateOf {
-            documentsState?.let {
-                if (committedSearchQuery.isBlank()) {
-                    it.take(3)
-                } else {
-                    it.filter { doc -> doc.name.contains(committedSearchQuery, ignoreCase = true) }
-                }
-            } ?: emptyList()
+            documentsState?.take(3) ?: emptyList()
         }
     }
 
@@ -161,68 +142,51 @@ fun HomeScreen(
         )
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFFA9FFF8),
-                        Color(0xFFF4FAFE),
-                        Color(0xFFFFFFFF)
-                    )
-                )
-            )
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = Color.Transparent
-        ) {
-            LazyColumn {
-                item { SectionTitle("Công cụ") }
-                item { ActionGrid(items = homeActions) }
-                item { SectionTitle(title = "Gần đây", actionText = "Xem tất cả", onActionClick = onShowAllClick) }
+    AppBackground {
+        LazyColumn {
+            item { SectionTitle("Công cụ") }
+            item { ActionGrid(items = homeActions) }
+            item { SectionTitle(title = "Gần đây", actionText = "Xem tất cả", onActionClick = onShowAllClick) }
 
-                if (documentsState == null) {
-                    item { Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
-                } else if (documentsToDisplay.isEmpty()) {
-                    item { Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) { Text(if (committedSearchQuery.isBlank()) "Chưa có tài liệu gần đây" else "Không tìm thấy tài liệu nào", color = Color(0xFF000000)) } }
-                } else {
-                    items(documentsToDisplay, key = { it.file.absolutePath }) { doc ->
-                        val onClick = remember(doc, context) { { FileOpener.openPdf(context, doc.file) } }
-                        val onDeleteClick = remember(doc, scope, context) {
-                            fun() {
-                                scope.launch {
-                                    if (withContext(Dispatchers.IO) { DocumentRepository.deleteDocument(doc) }) {
-                                        withContext(Dispatchers.Main) { Toast.makeText(context, "Đã xóa ${doc.name}", Toast.LENGTH_SHORT).show() }
-                                    } else {
-                                        withContext(Dispatchers.Main) { Toast.makeText(context, "Lỗi khi xóa ${doc.name}", Toast.LENGTH_SHORT).show() }
-                                    }
+            if (documentsState == null) {
+                item { Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+            } else if (documentsToDisplay.isEmpty()) {
+                item { Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) { Text("Chưa có tài liệu gần đây", color = MaterialTheme.colorScheme.onBackground) } }
+            } else {
+                items(documentsToDisplay, key = { it.file.absolutePath }) { doc ->
+                    val onClick = remember(doc, context) { { FileOpener.openPdf(context, doc.file) } }
+                    val onDeleteClick = remember(doc, scope, context) {
+                        fun() {
+                            scope.launch {
+                                if (withContext(Dispatchers.IO) { DocumentRepository.deleteDocument(doc) }) {
+                                    withContext(Dispatchers.Main) { Toast.makeText(context, "Đã xóa ${doc.name}", Toast.LENGTH_SHORT).show() }
+                                } else {
+                                    withContext(Dispatchers.Main) { Toast.makeText(context, "Lỗi khi xóa ${doc.name}", Toast.LENGTH_SHORT).show() }
                                 }
                             }
                         }
-                        val onRenameClick = remember(doc, scope, context) {
-                            fun(newName: String) {
-                                scope.launch {
-                                    if (withContext(Dispatchers.IO) { DocumentRepository.renameDocument(doc, newName) }) {
-                                        withContext(Dispatchers.Main) { Toast.makeText(context, "Đã đổi tên thành công", Toast.LENGTH_SHORT).show() }
-                                    } else {
-                                        withContext(Dispatchers.Main) { Toast.makeText(context, "Lỗi khi đổi tên", Toast.LENGTH_SHORT).show() }
-                                    }
-                                }
-                            }
-                        }
-
-                        DocumentCard(
-                            title = doc.name,
-                            date = doc.formattedDate,
-                            pageCount = doc.pageCount,
-                            thumbnail = thumbnails[doc.file.absolutePath],
-                            onClick = onClick,
-                            onDeleteClick = onDeleteClick,
-                            onRenameClick = onRenameClick
-                        )
                     }
+                    val onRenameClick = remember(doc, scope, context) {
+                        fun(newName: String) {
+                            scope.launch {
+                                if (withContext(Dispatchers.IO) { DocumentRepository.renameDocument(doc, newName) }) {
+                                    withContext(Dispatchers.Main) { Toast.makeText(context, "Đã đổi tên thành công", Toast.LENGTH_SHORT).show() }
+                                } else {
+                                    withContext(Dispatchers.Main) { Toast.makeText(context, "Lỗi khi đổi tên", Toast.LENGTH_SHORT).show() }
+                                }
+                            }
+                        }
+                    }
+
+                    DocumentCard(
+                        title = doc.name,
+                        date = doc.formattedDate,
+                        pageCount = doc.pageCount,
+                        thumbnail = thumbnails[doc.file.absolutePath],
+                        onClick = onClick,
+                        onDeleteClick = onDeleteClick,
+                        onRenameClick = onRenameClick
+                    )
                 }
             }
         }

@@ -2,7 +2,6 @@ package com.example.docscan.ui.screens
 
 import android.graphics.Bitmap
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,18 +13,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.example.docscan.logic.storage.DocumentFile
 import com.example.docscan.logic.storage.DocumentRepository
 import com.example.docscan.logic.utils.FileOpener
 import com.example.docscan.logic.utils.PdfThumbnailGenerator
+import com.example.docscan.ui.components.AppBackground
 import com.example.docscan.ui.components.DocumentCard
+import com.example.docscan.ui.theme.Theme
+import com.example.docscan.ui.theme.ThemeViewModel
+import com.example.docscan.ui.theme.ThemeViewModelFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,6 +38,9 @@ import kotlinx.coroutines.withContext
 fun FilesScreen(navController: NavHostController? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    val themeViewModel: ThemeViewModel = viewModel(factory = ThemeViewModelFactory(context))
+    val currentTheme by themeViewModel.theme.collectAsState()
 
     val documents by DocumentRepository.documents.collectAsState()
     var thumbnails by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
@@ -69,11 +75,9 @@ fun FilesScreen(navController: NavHostController? = null) {
             scope.launch {
                 val docsToDelete = selectedDocuments.toList()
                 val deletedCount = docsToDelete.size
-                // Perform heavy I/O on background thread
                 withContext(Dispatchers.IO) {
                     DocumentRepository.deleteDocuments(docsToDelete)
                 }
-                // Update UI on main thread
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "Đã xóa $deletedCount tệp", Toast.LENGTH_SHORT).show()
                     clearSelection()
@@ -82,67 +86,64 @@ fun FilesScreen(navController: NavHostController? = null) {
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    if (selectionMode) {
-                        Text("Đã chọn ${selectedDocuments.size}")
-                    } else {
-                        Text("Tất cả (${documents.size})")
-                    }
-                },
-                navigationIcon = {
-                    if (selectionMode) {
-                        IconButton(onClick = clearSelection) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+    AppBackground {
+        Scaffold(
+            topBar = {
+                val isDarkTheme = currentTheme == Theme.DARK
+                TopAppBar(
+                    title = {
+                        if (selectionMode) {
+                            Text("Đã chọn ${selectedDocuments.size}")
+                        } else {
+                            Text("Tất cả (${documents.size})")
                         }
-                    }
-                },
-                actions = {
-                    if (selectionMode) {
-                        IconButton(onClick = deleteSelectedDocuments) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
+                    },
+                    navigationIcon = {
+                        if (selectionMode) {
+                            IconButton(onClick = clearSelection) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
                         }
-                    } else {
-                        IconButton(onClick = { /*TODO: Sort logic*/ }) { Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort") }
-                        IconButton(onClick = { /*TODO: Grid/List toggle*/ }) { Icon(Icons.Default.GridView, contentDescription = "Grid View") }
-                        IconButton(onClick = { selectionMode = true }) { Icon(Icons.Default.Check, contentDescription = "Select") }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = Color.Black,
-                    navigationIconContentColor = Color.Black,
-                    actionIconContentColor = Color.Black
-                ),
-                modifier = Modifier.background(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(Color(0xFF26AAE2), Color(0xFF26E2BC))
-                    )
-                )
-            )
-        }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFA9FFF8),
-                            Color(0xFFF4FAFE),
-                            Color(0xFFFFFFFF)
+                    },
+                    actions = {
+                        if (selectionMode) {
+                            IconButton(onClick = deleteSelectedDocuments) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
+                            }
+                        } else {
+                            IconButton(onClick = { /*TODO: Sort logic*/ }) { Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort") }
+                            IconButton(onClick = { /*TODO: Grid/List toggle*/ }) { Icon(Icons.Default.GridView, contentDescription = "Grid View") }
+                            IconButton(onClick = { selectionMode = true }) { Icon(Icons.Default.Check, contentDescription = "Select") }
+                        }
+                    },
+                    colors = if (isDarkTheme) {
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            titleContentColor = MaterialTheme.colorScheme.onSurface,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                            actionIconContentColor = MaterialTheme.colorScheme.onSurface
                         )
-                    )
+                    } else {
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color(0xFFCCFCFA),
+                            titleContentColor = MaterialTheme.colorScheme.onSurface,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                            actionIconContentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 )
-                .padding(paddingValues)
-        ) {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            },
+            containerColor = Color.Transparent
+        ) { paddingValues ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
                 if (documents.isEmpty()) {
                     item {
                         Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Chưa có tài liệu nào", color = Color(0xFF000000))
+                            Text("Chưa có tài liệu nào", color = MaterialTheme.colorScheme.onBackground)
                         }
                     }
                 } else {

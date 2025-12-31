@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.DocScan" parent="Theme.Material3.DayNight.NoActionBar" />
+    <style name="Theme.DocScan" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Set a solid background color to prevent the default logo splash from overlapping our composable splash screen -->
+        <item name="android:windowBackground">@color/white</item>
+    </style>
 </resources>

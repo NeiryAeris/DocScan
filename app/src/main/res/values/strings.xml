@@ -1,12 +1,5 @@
 <resources>
     <string name="app_name">DocScan</string>
-    <string name="alert_dialog_title_storage_permission">Storage Permission</string>
-    <string name="alert_dialog_title_crop_image_success">Image saved</string>
-
-    <string name="message_storage_permission_request">
-        The app requires the storage permission to access pictures on your device. The app could only
-        access those pictures that you have selected.
-    </string>
-    <string name="text_extraction_decode_error">Không thể đọc nội dung ảnh đã chọn.</string>
-    <string name="text_extraction_unknown_error">Có lỗi xảy ra khi trích xuất văn bản.</string>
+    <string name="alert_dialog_title_storage_permission">Storage Permission Required</string>
+    <string name="message_storage_permission_request">To save documents, the app needs permission to access your device\'s storage.</string>
 </resources>
