@@ -37,7 +37,7 @@ class RemoteChatClientImpl(
         val requestDto = RemoteChatRequestDto(prompt = prompt, history = history)
         val jsonBody = requestAdapter.toJson(requestDto)
 
-        val url = "${baseUrl.trimEnd('/')}/api/chat/ask"
+        val url = "${baseUrl.trimEnd('/')}/api/ai/chat/ask"
 
         val req = Request.Builder()
             .url(url)
