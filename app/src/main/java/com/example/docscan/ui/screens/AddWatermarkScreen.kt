@@ -246,7 +246,8 @@ fun AddWatermarkScreen(navController: NavHostController) {
 
                     Button(
                         onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF26E2BC))
                     ) {
                         Text(if (pdfUri == null) "Chọn tệp PDF" else "Thay đổi tệp PDF")
                     }
@@ -263,7 +264,10 @@ fun AddWatermarkScreen(navController: NavHostController) {
 
                     when (tabIndex) {
                         0 -> {
-                            Button(onClick = { imagePickerLauncher.launch("image/*") }) {
+                            Button(
+                                onClick = { imagePickerLauncher.launch("image/*") },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF26E2BC))
+                            ) {
                                 Text("Chọn ảnh logo")
                             }
                             imageUri?.let {
@@ -311,7 +315,8 @@ fun AddWatermarkScreen(navController: NavHostController) {
                             }
                         },
                         enabled = pdfUri != null && ((tabIndex == 0 && imageUri != null) || (tabIndex == 1 && watermarkText.isNotBlank())),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF26E2BC))
                     ) {
                         Text("Lưu tệp PDF")
                     }
@@ -349,7 +354,10 @@ fun AddWatermarkScreen(navController: NavHostController) {
             } else {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     if (pdfUri == null) {
-                        Button(onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) }) {
+                        Button(
+                            onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF26E2BC))
+                        ) {
                             Text("Chọn tệp PDF để bắt đầu")
                         }
                     } else {
