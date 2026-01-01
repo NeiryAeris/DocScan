@@ -42,6 +42,7 @@ import com.example.docscan.logic.scan.PageSlot
 import com.example.docscan.logic.session.SessionController
 import com.example.docscan.logic.storage.AppStorage
 import com.example.docscan.logic.utils.AndroidPdfExporter
+import com.example.docscan.logic.ai.AiIndexing
 import com.example.pipeline_core.EncodedPage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -114,6 +115,14 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                 val outFile = File(outputDir, "Scan_$timestamp.pdf")
 
                 AndroidPdfExporter(context).export(pagesToExport, outFile)
+
+                try {
+                    AiIndexing.indexPdf(context, outFile, title = outFile.nameWithoutExtension)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    // Don’t block save; just show a toast later if you want
+                }
+
                 // Notify the media scanner about the new file
                 MediaScannerConnection.scanFile(context, arrayOf(outFile.toString()), null, null)
 

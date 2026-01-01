@@ -12,6 +12,8 @@ import com.example.ocr_remote.RemoteChatClientImpl
 import com.example.ocr_remote.RemoteDriveClientImpl
 import com.example.ocr_remote.RemoteOcrClientImpl
 import com.example.ocr_remote.RemoteHandwritingClientImpl
+import com.example.ocr_remote.RemoteAiClient
+import com.example.ocr_remote.RemoteAiClientImpl
 import com.example.pipeline_core.legacy.DocumentPipeline
 import com.google.firebase.auth.FirebaseAuth
 import org.opencv.android.OpenCVLoader
@@ -48,6 +50,11 @@ class App : Application() {
             authTokenProvider = { FirebaseIdTokenStore.get() }
         )
 
+        aiClient = RemoteAiClientImpl(
+            baseUrl = baseUrl,
+            authTokenProvider = { FirebaseIdTokenStore.get() }
+        )
+
         // Drive (Firebase auth required)
         driveClient = RemoteDriveClientImpl(
             baseUrl = baseUrl,
@@ -75,6 +82,9 @@ class App : Application() {
             private set
 
         lateinit var chatClient: RemoteChatClient
+            private set
+
+        lateinit var aiClient: RemoteAiClient
             private set
 
         var isUserLoggedIn: Boolean = false

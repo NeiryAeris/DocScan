@@ -4,12 +4,18 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.database.Cursor
+import android.graphics.Bitmap
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.ParcelFileDescriptor
+import android.provider.OpenableColumns
 import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,12 +26,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,27 +57,186 @@ import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.example.docscan.App
 import com.example.docscan.R
+import com.example.docscan.auth.FirebaseIdTokenStore
+import com.example.ocr.core.api.OcrImage
 import com.example.ocr_remote.ChatMessageDto
+import com.example.ocr_remote.RemoteAiAskResponseDto
+import com.example.ocr_remote.RemoteAiClientImpl
+import com.example.ocr_remote.RemoteAiPageInDto
+import com.example.ocr_remote.RemoteAiUpsertOcrRequestDto
 import com.example.ocr_remote.RemoteChatResult
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
+import java.security.MessageDigest
+import java.nio.ByteBuffer
 
 @Composable
 fun ChatScreen(navController: NavHostController) {
     val context = LocalContext.current
-    val chatClient = App.chatClient
     val scope = rememberCoroutineScope()
     val firebaseUser = remember { FirebaseAuth.getInstance().currentUser }
 
+    // Generic chat (already in your App)
+    val chatClient = App.chatClient
+
+    // AI RAG client (needs Firebase token)
+    val aiClient = remember {
+        RemoteAiClientImpl(
+            baseUrl = "https://gateway.neirylittlebox.com",
+            authTokenProvider = { FirebaseIdTokenStore.get() }
+        )
+    }
+
+    // OCR gateway (already in your App)
+    val ocrGateway = App.ocrGateway
+
     var prompt by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf<List<ChatMessageDto>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(false) }
+
+    var isAsking by remember { mutableStateOf(false) }
+    var isIndexing by remember { mutableStateOf(false) }
+
+    // Active document
+    var activeDocId by remember { mutableStateOf<String?>(null) }
+    var activeDocTitle by remember { mutableStateOf<String?>(null) }
+    var useDocumentMode by remember { mutableStateOf(true) } // only matters if activeDocId != null
+
+    fun uriDisplayName(uri: Uri): String? {
+        val cursor: Cursor? = context.contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameIndex >= 0 && it.moveToFirst()) return it.getString(nameIndex)
+        }
+        return null
+    }
+
+    suspend fun copyUriToCache(uri: Uri, suggestedName: String?): File = withContext(Dispatchers.IO) {
+        val name = (suggestedName ?: "document.pdf").replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val outFile = File(context.cacheDir, "chat_upload_$name")
+        context.contentResolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { "Cannot open selected file" }
+            FileOutputStream(outFile).use { output -> input.copyTo(output) }
+        }
+        outFile
+    }
+
+    fun stableDocId(file: File): String {
+        // Fast + stable enough: SHA-256 of (size + first 1MB)
+        val md = MessageDigest.getInstance("SHA-256")
+        md.update(file.length().toString().toByteArray())
+        file.inputStream().use { input ->
+            val buf = ByteArray(1024 * 1024)
+            val read = input.read(buf)
+            if (read > 0) md.update(buf, 0, read)
+        }
+        return md.digest().joinToString("") { "%02x".format(it) }.take(32)
+    }
+
+    suspend fun ocrPdfToPages(docId: String, pdfFile: File, maxPages: Int = 30): List<RemoteAiPageInDto> =
+        withContext(Dispatchers.IO) {
+            val pages = mutableListOf<RemoteAiPageInDto>()
+
+            val pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
+            val renderer = PdfRenderer(pfd)
+
+            try {
+                val count = minOf(renderer.pageCount, maxPages)
+                for (i in 0 until count) {
+                    val page = renderer.openPage(i)
+                    try {
+                        // Render at a reasonable scale (avoid OOM)
+                        val scale = 2
+                        val width = page.width * scale
+                        val height = page.height * scale
+                        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+
+                        val buffer = ByteBuffer.allocate(bitmap.byteCount)
+                        bitmap.copyPixelsToBuffer(buffer)
+
+                        val ocrImage = OcrImage.Rgba8888(
+                            bytes = buffer.array(),
+                            width = bitmap.width,
+                            height = bitmap.height,
+                            rowStride = bitmap.rowBytes
+                        )
+
+                        val result = ocrGateway.recognize(
+                            docId = docId,
+                            pageId = "page_${i + 1}",
+                            image = ocrImage
+                        )
+
+                        val text = result.text.raw.ifBlank { "" }
+                        pages.add(RemoteAiPageInDto(pageNumber = i + 1, text = text))
+
+                        bitmap.recycle()
+                    } finally {
+                        page.close()
+                    }
+                }
+            } finally {
+                renderer.close()
+                pfd.close()
+            }
+
+            pages
+        }
+
+    suspend fun indexPdfIntoRag(docTitle: String?, pdfFile: File): String = withContext(Dispatchers.IO) {
+        val docId = stableDocId(pdfFile)
+
+        // 1) OCR all pages -> list of RemoteAiPageInDto
+        val pages = ocrPdfToPages(docId, pdfFile, maxPages = 30)
+
+        // 2) Upsert into vector index (gateway builds chunks server-side)
+        aiClient.upsertOcrIndex(
+            RemoteAiUpsertOcrRequestDto(
+                docId = docId,
+                title = docTitle ?: pdfFile.name,
+                replace = true,
+                pages = pages
+            )
+        )
+
+        docId
+    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? ->
-            uri?.let {
-                Toast.makeText(context, "Tệp đã chọn: $it", Toast.LENGTH_LONG).show()
+            if (uri == null) return@rememberLauncherForActivityResult
+
+            val mime = context.contentResolver.getType(uri)
+            if (mime != null && mime != "application/pdf") {
+                Toast.makeText(context, "Hiện chỉ hỗ trợ PDF để index: ($mime)", Toast.LENGTH_LONG).show()
+                return@rememberLauncherForActivityResult
+            }
+
+            scope.launch {
+                try {
+                    isIndexing = true
+                    val displayName = uriDisplayName(uri)
+                    val file = copyUriToCache(uri, displayName)
+
+                    activeDocTitle = displayName ?: file.name
+                    useDocumentMode = true
+
+                    val docId = indexPdfIntoRag(activeDocTitle, file)
+                    activeDocId = docId
+
+                    Toast.makeText(context, "Đã index: $activeDocTitle", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    activeDocId = null
+                    activeDocTitle = null
+                    Toast.makeText(context, "Index lỗi: ${e.message}", Toast.LENGTH_LONG).show()
+                } finally {
+                    isIndexing = false
+                }
             }
         }
     )
@@ -86,7 +253,7 @@ fun ChatScreen(navController: NavHostController) {
 
     val requestPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
-    ) { isGranted: Boolean ->
+    ) { isGranted ->
         if (isGranted) {
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -107,28 +274,66 @@ fun ChatScreen(navController: NavHostController) {
                 }
                 speechRecognizerLauncher.launch(intent)
             }
-            else -> {
-                requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            }
+            else -> requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
-    fun sendMessage() {
-        if (prompt.isNotBlank() && !isLoading) {
-            val userMessage = ChatMessageDto(role = "user", text = prompt)
-            messages = messages + userMessage
-            val currentPrompt = prompt
-            prompt = ""
-            isLoading = true
+    fun formatRagMeta(resp: RemoteAiAskResponseDto): String {
+        if (resp.usedChunks <= 0) return ""
+        val top = resp.citations.take(3).joinToString("\n") { c ->
+            val doc = c.docId ?: "doc"
+            val page = c.page?.let { "p$it" } ?: "p?"
+            val score = c.score?.let { String.format("%.3f", it) } ?: "?"
+            "• $doc / $page (score=$score)"
+        }
+        return "\n\nSources:\n$top"
+    }
 
-            scope.launch {
-                val result = chatClient.ask(prompt = currentPrompt, history = messages.dropLast(1))
-                val responseMessage = when (result) {
-                    is RemoteChatResult.Success -> ChatMessageDto(role = "model", text = result.response)
-                    is RemoteChatResult.Error -> ChatMessageDto(role = "model", text = "Error: ${result.message}")
+    fun sendMessage() {
+        if (prompt.isBlank() || isAsking || isIndexing) return
+
+        val historySnapshot = messages
+        val currentPrompt = prompt.trim()
+        prompt = ""
+
+        val userMessage = ChatMessageDto(role = "user", text = currentPrompt)
+        messages = historySnapshot + userMessage
+        isAsking = true
+
+        scope.launch {
+            try {
+                val hasDoc = (activeDocId != null && useDocumentMode)
+
+                if (hasDoc) {
+                    // ✅ RAG ask (NO history param here)
+                    val resp = aiClient.askChat(
+                        question = currentPrompt,
+                        docIds = listOf(activeDocId!!),
+                        topK = 8
+                    )
+                    val answerText = if (resp.hasError()) {
+                        "Error: ${resp.error}"
+                    } else {
+                        resp.answerText()
+                    }
+                    val text = answerText + formatRagMeta(resp)
+                    messages = messages + ChatMessageDto(role = "model", text = text)
+                } else {
+                    // ✅ Generic chat (keeps your history behavior)
+                    val result = chatClient.ask(
+                        prompt = currentPrompt,
+                        history = historySnapshot
+                    )
+                    val reply = when (result) {
+                        is RemoteChatResult.Success -> result.response
+                        is RemoteChatResult.Error -> "Error: ${result.message}"
+                    }
+                    messages = messages + ChatMessageDto(role = "model", text = reply)
                 }
-                messages = messages + responseMessage
-                isLoading = false
+            } catch (e: Exception) {
+                messages = messages + ChatMessageDto(role = "model", text = "Error: ${e.message}")
+            } finally {
+                isAsking = false
             }
         }
     }
@@ -146,6 +351,56 @@ fun ChatScreen(navController: NavHostController) {
                 textAlign = TextAlign.Center,
                 color = Color.Black
             )
+
+            // Active document badge + mode toggle
+            if (activeDocId != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF3F4F6), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = activeDocTitle ?: "Document",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Black
+                        )
+                        Text(
+                            text = if (useDocumentMode) "Mode: Document (RAG)" else "Mode: General",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+
+                    Text(
+                        text = if (useDocumentMode) "Switch: General" else "Switch: Doc",
+                        color = Color(0xFF6366F1),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White)
+                            .clickable { useDocumentMode = !useDocumentMode }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    IconButton(onClick = {
+                        activeDocId = null
+                        activeDocTitle = null
+                        useDocumentMode = true
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear document",
+                            tint = Color.Gray
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             LazyColumn(
@@ -156,7 +411,8 @@ fun ChatScreen(navController: NavHostController) {
                     ChatMessageItem(message = message, firebaseUser)
                 }
             }
-            if (isLoading) {
+
+            if (isIndexing || isAsking) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -164,41 +420,55 @@ fun ChatScreen(navController: NavHostController) {
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "Trợ lí đang phản hồi...",
+                        text = when {
+                            isIndexing -> "Đang index tài liệu..."
+                            else -> "Trợ lí đang phản hồi..."
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.Gray
                     )
                 }
             }
+
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
+                IconButton(
+                    onClick = { filePickerLauncher.launch("application/pdf") },
+                    enabled = !isIndexing && !isAsking
+                ) {
                     Icon(
                         imageVector = Icons.Default.AttachFile,
-                        contentDescription = "Tải tệp lên",
+                        contentDescription = "Chọn PDF để index",
                         tint = Color.Gray
                     )
                 }
+
                 OutlinedTextField(
                     value = prompt,
                     onValueChange = { prompt = it },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Hỏi bất cứ điều gì...") },
-                    enabled = !isLoading,
+                    enabled = !isIndexing && !isAsking,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.Black,
                         unfocusedTextColor = Color.Black,
                         cursorColor = Color.Black
                     )
                 )
-                IconButton(onClick = { startVoiceRecognition() }, enabled = !isLoading) {
+
+                IconButton(onClick = { startVoiceRecognition() }, enabled = !isIndexing && !isAsking) {
                     Icon(
                         imageVector = Icons.Default.Mic,
                         contentDescription = "Ghi âm giọng nói",
                         tint = Color.Gray
                     )
                 }
+
                 Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = { sendMessage() }, enabled = !isLoading && prompt.isNotBlank()) {
+
+                IconButton(
+                    onClick = { sendMessage() },
+                    enabled = !isIndexing && !isAsking && prompt.isNotBlank()
+                ) {
                     Icon(
                         painter = painterResource(id = R.drawable.send),
                         contentDescription = "Gửi",

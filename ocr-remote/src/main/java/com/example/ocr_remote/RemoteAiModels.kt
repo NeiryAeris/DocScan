@@ -52,10 +52,23 @@ data class RemoteAiCitationDto(
 
 @JsonClass(generateAdapter = true)
 data class RemoteAiAskResponseDto(
-    val answer: String,
+    // Python may return "answer"
+    val answer: String? = null,
+
+    // Gateway currently returns "response"
+    val response: String? = null,
+
+    // Gateway returns "error" (string or null)
+    val error: String? = null,
+
+    // If later you update gateway to pass citations through, this will start working automatically
     val citations: List<RemoteAiCitationDto> = emptyList(),
+
     @Json(name = "used_chunks") val usedChunks: Int = 0
-)
+) {
+    fun answerText(): String = answer ?: response ?: ""
+    fun hasError(): Boolean = !error.isNullOrBlank()
+}
 
 interface RemoteAiClient {
     suspend fun upsertOcrIndex(body: RemoteAiUpsertOcrRequestDto): RemoteAiUpsertOcrResponseDto
