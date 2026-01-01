@@ -1,5 +1,6 @@
 package com.example.docscan.ui.screens
 
+import com.example.docscan.App
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -116,14 +117,54 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
 
                 AndroidPdfExporter(context).export(pagesToExport, outFile)
 
+                // Local RAG indexing (your current behavior)
                 try {
                     AiIndexing.indexPdf(context, outFile, title = outFile.nameWithoutExtension)
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    // Don’t block save; just show a toast later if you want
                 }
 
-                // Notify the media scanner about the new file
+                // ✅ Drive backup + Drive->Index sync (non-blocking UX; errors don't prevent save)
+                try {
+                    // Skip huge files (gateway default upload limit is typically ~25MB)
+                    val maxBytes = 25L * 1024 * 1024
+                    if (outFile.length() <= maxBytes) {
+                        val status = App.driveClient.status()
+                        if (status.linked) {
+                            if (status.folderId == null) {
+                                App.driveClient.initFolder()
+                            }
+
+                            App.driveClient.upload(
+                                bytes = outFile.readBytes(),
+                                filename = outFile.name,
+                                mimeType = "application/pdf"
+                            )
+
+                            // Optional but recommended: server indexes Drive files -> searchable in RAG
+                            val sync = App.driveClient.sync()
+
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(
+                                    context,
+                                    "Drive: uploaded. Indexed=${sync.counts.indexed}, skipped=${sync.counts.skipped}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Drive: skipped (PDF > 25MB)", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Drive backup failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+
+                // Notify the media scanner
                 MediaScannerConnection.scanFile(context, arrayOf(outFile.toString()), null, null)
 
                 withContext(Dispatchers.Main) {
