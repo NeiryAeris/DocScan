@@ -80,6 +80,7 @@ dependencies {
     // Core AndroidX
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.3")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
@@ -112,4 +113,6 @@ dependencies {
     // Google Sign In
     implementation ("com.google.android.gms:play-services-auth:21.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+
+
 }

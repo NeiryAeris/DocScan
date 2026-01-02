@@ -31,29 +31,22 @@ data class ActionItemData(
     val onClick: () -> Unit = {}
 )
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ActionGrid(items: List<ActionItemData>, columnCount: Int = 4) {
-    Column(
-        modifier = Modifier.padding(vertical = 16.dp),
+fun ActionGrid(items: List<ActionItemData>) {
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp, horizontal = 8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        items.chunked(columnCount).forEach { rowItems ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+        items.forEach { item ->
+            Box(
+                modifier = Modifier.width(80.dp), // Set a fixed width for each item
+                contentAlignment = Alignment.TopCenter
             ) {
-                for (item in rowItems) {
-                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                        ActionGridItem(item)
-                    }
-                }
-                if (rowItems.size < columnCount) {
-                    for (i in 0 until (columnCount - rowItems.size)) {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
+                ActionGridItem(item)
             }
         }
     }
@@ -114,7 +107,7 @@ fun Preview_ActionGrid() {
         ActionItemData(Icons.Filled.Description, "Docs"),
         ActionItemData(Icons.Filled.PictureAsPdf, "PDF")
     )
-    ActionGrid(items = sampleItems, columnCount = 4)
+    ActionGrid(items = sampleItems)
 }
 
 @Preview(name = "ActionGridItem Preview", showBackground = true)

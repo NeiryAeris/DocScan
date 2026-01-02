@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
@@ -40,6 +41,7 @@ import com.example.docscan.App
 import com.example.docscan.R
 import com.example.docscan.auth.AuthState
 import com.example.docscan.auth.GoogleAuthManager
+import com.example.docscan.data.UserPreferencesRepository
 import com.example.docscan.ui.components.AppBackground
 import com.example.docscan.ui.theme.Theme
 import com.example.docscan.ui.theme.ThemeViewModel
@@ -56,6 +58,10 @@ fun ProfileScreen(navController: NavHostController) {
     val uriHandler = LocalUriHandler.current
 
     val themeViewModel: ThemeViewModel = viewModel(factory = ThemeViewModelFactory(context))
+    val profileViewModel: ProfileViewModel = viewModel(factory = ProfileViewModelFactory(UserPreferencesRepository(context)))
+
+    val isBackupEnabled by profileViewModel.isBackupEnabled.collectAsStateWithLifecycle()
+
     var showThemeDialog by remember { mutableStateOf(false) }
 
     var showFeedbackSheet by remember { mutableStateOf(false) }
@@ -65,7 +71,6 @@ fun ProfileScreen(navController: NavHostController) {
     val ratingSheetState = rememberModalBottomSheetState()
 
     var authState by remember { mutableStateOf<AuthState>(AuthState.SignedOut) }
-    var isBackupEnabled by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
@@ -152,7 +157,7 @@ fun ProfileScreen(navController: NavHostController) {
                                                     Log.i("ProfileScreen", "Drive linked, initializing app folder...")
                                                     App.driveClient.initFolder()
                                                 }
-                                                isBackupEnabled = true
+                                                profileViewModel.setBackupEnabled(true)
                                                 Toast.makeText(context, "Đã bật sao lưu và đồng bộ hóa.", Toast.LENGTH_SHORT).show()
                                             } else {
                                                 Log.i("ProfileScreen", "Drive not linked, starting OAuth flow...")
@@ -166,7 +171,7 @@ fun ProfileScreen(navController: NavHostController) {
                                         }
                                     }
                                 } else {
-                                    isBackupEnabled = false
+                                    profileViewModel.setBackupEnabled(false)
                                     Toast.makeText(context, "Đã tắt sao lưu.", Toast.LENGTH_SHORT).show()
                                 }
                             }
