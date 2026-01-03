@@ -69,4 +69,47 @@ class CamScanPipeline(
             overlayJpeg = overlay
         )
     }
+
+    private fun fullFrameQuad(src: com.example.domain.types.ImageRef): FloatArray {
+        val w = (src.width - 1).coerceAtLeast(0).toFloat()
+        val h = (src.height - 1).coerceAtLeast(0).toFloat()
+        return floatArrayOf(
+            0f, 0f,
+            w, 0f,
+            w, h,
+            0f, h
+        )
+    }
+
+    /**
+     * Input: already-flat JPEG (e.g. born-digital PDF rendered to bitmap)
+     * Output: enhanced JPEG + full-frame quad (no detect/warp)
+     */
+    fun processFlatJpeg(flatJpeg: ByteArray, options: Options = Options()): Result {
+        val src = imaging.fromBytes(flatJpeg)
+        val quad = fullFrameQuad(src)
+
+        val paper = PaperGuesser.guessByAspect(
+            aspect = PaperGuesser.aspectFromQuad(quad),
+            dpi = defaultDpi,
+            tol = tol
+        )?.name
+
+        val enhanced = imaging.enhanceDocument(src, options.enhanceMode)
+        val outJpeg = imaging.toJpeg(enhanced, options.jpegQuality)
+
+        val overlay = if (options.includeOverlay) {
+            ImagingInterop.tryDrawOverlayJpeg(imaging, src, quad, options.overlayQuality)
+        } else null
+
+        ImagingInterop.tryRelease(imaging, src, enhanced)
+
+        return Result(
+            outJpeg = outJpeg,
+            quad = quad,
+            paperName = paper,
+            overlayJpeg = overlay
+        )
+    }
+
 }

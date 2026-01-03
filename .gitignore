@@ -3,16 +3,24 @@
 # ======================
 .gradle/
 **/build/
+**/.gradle/
 !gradle/wrapper/gradle-wrapper.jar
 
+# (Optional) keep wrapper properties too (usually tracked)
+!gradle/wrapper/gradle-wrapper.properties
+
+# ======================
 # Android Studio / IntelliJ
+# ======================
 .idea/
 *.iml
 *.ipr
 *.iws
 out/
 
+# ======================
 # Local machine config / secrets
+# ======================
 local.properties
 *.keystore
 *.jks
@@ -28,9 +36,11 @@ local.properties
 *.class
 hs_err_pid*
 
-# Kotlin/Compose caches
+# Kotlin caches / compiler working dirs
 .kotlin/
 .kotlinc/
+**/.kotlin/
+**/.kotlinc/
 compose_compiler/
 
 # ======================
@@ -70,4 +80,6 @@ docscan_smoke_doc_*.pdf
 Thumbs.db
 ehthumbs.db
 *.stackdump
+
+# Firebase config (keep ignored if you don't want it committed)
 app/google-services.json

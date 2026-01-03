@@ -1,5 +1,8 @@
 package com.example.docscan.ui.screens
 
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.Color as AndroidColor
+import android.graphics.Matrix
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -82,7 +85,8 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
 
     val sessionController = remember { SessionController(context) }
     val sessionState by sessionController.state.collectAsState()
-    var enhanceMode by remember { mutableStateOf("color-pro") }
+//    var enhanceMode by remember { mutableStateOf("color-pro") }
+    var enhanceMode by remember { mutableStateOf("color_pro") }
 
     fun finishAndExport(andPop: Boolean = true) {
         scope.launch(Dispatchers.IO) {
@@ -262,17 +266,43 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                         }
 
                         for (i in 0 until pageCount) {
+//                            val page = renderer.openPage(i)
+//                            val bitmap = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
+//                            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+//                            page.close()
+//
+//                            val stream = ByteArrayOutputStream()
+//                            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+//                            val byteArray = stream.toByteArray()
+//                            bitmap.recycle()
+//
+//                            sessionController.processIntoSlot(appendIndex + i, byteArray, enhanceMode)
+
                             val page = renderer.openPage(i)
-                            val bitmap = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
-                            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+
+                            // Render at higher scale for better OCR + fill white background to avoid black pages
+                            val scale = 2f
+                            val w = (page.width * scale).toInt().coerceAtLeast(1)
+                            val h = (page.height * scale).toInt().coerceAtLeast(1)
+
+                            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+
+                            // IMPORTANT: born-digital PDFs may have transparent background -> JPEG becomes black without this
+                            AndroidCanvas(bitmap).drawColor(AndroidColor.WHITE)
+
+                            val matrix = Matrix().apply { postScale(scale, scale) }
+
+                            // FOR_PRINT tends to be sharper for text PDFs
+                            page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
                             page.close()
 
                             val stream = ByteArrayOutputStream()
-                            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream)
                             val byteArray = stream.toByteArray()
                             bitmap.recycle()
 
-                            sessionController.processIntoSlot(appendIndex + i, byteArray, enhanceMode)
+                            // Use PDF-flat pipeline (skip detect/warp)
+                            sessionController.processPdfIntoSlot(appendIndex + i, byteArray, enhanceMode)
                         }
                         renderer.close()
                         pfd.close()
@@ -364,7 +394,8 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                                     modifier = Modifier.size(64.dp),
                                     contentPadding = PaddingValues(0.dp)
                                 ) {
-                                    val icon = if (enhanceMode == "color-pro") Icons.Default.ColorLens else Icons.Default.FilterBAndW
+//                                    val icon = if (enhanceMode == "color-pro") Icons.Default.ColorLens else Icons.Default.FilterBAndW
+                                    val icon = if (enhanceMode == "color_pro") Icons.Default.ColorLens else Icons.Default.FilterBAndW
                                     Icon(icon, contentDescription = "Change scan mode")
                                 }
                                 DropdownMenu(
@@ -374,7 +405,8 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                                     DropdownMenuItem(
                                         text = { Text("Quét màu") },
                                         onClick = {
-                                            enhanceMode = "color-pro"
+//                                            enhanceMode = "color-pro"
+                                            enhanceMode = "color_pro"
                                             showModeMenu = false
                                         },
                                         leadingIcon = { Icon(Icons.Default.ColorLens, null) }
@@ -382,7 +414,8 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                                     DropdownMenuItem(
                                         text = { Text("Quét đen trắng") },
                                         onClick = {
-                                            enhanceMode = "auto-pro"
+//                                            enhanceMode = "auto-pro"
+                                            enhanceMode = "bw_pro"
                                             showModeMenu = false
                                         },
                                         leadingIcon = { Icon(Icons.Default.FilterBAndW, null) }

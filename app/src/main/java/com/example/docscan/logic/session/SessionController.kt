@@ -39,6 +39,18 @@ class SessionController(
         }
     }
 
+    private fun normalizeEnhanceMode(mode: String): String {
+        return when (mode.trim().lowercase()) {
+            // old UI values
+            "color-pro" -> "color_pro"
+            "auto-pro" -> "bw_pro"   // UI của bạn đang dùng "auto-pro" cho đen trắng
+            // already-correct values
+            "color_pro", "auto_pro", "bw_pro" -> mode.trim().lowercase()
+            else -> mode.trim().lowercase()
+        }
+    }
+
+
     suspend fun processIntoSlot(index: Int, cameraJpeg: ByteArray, enhanceMode: String) {
         val sessionId = _state.value.sessionId
 
@@ -58,7 +70,7 @@ class SessionController(
                 pipeline.processJpeg(
                     cameraJpeg = cameraJpeg,
                     options = CamScanPipeline.Options(
-                        enhanceMode = enhanceMode,
+                        enhanceMode = normalizeEnhanceMode(enhanceMode),
                         jpegQuality = 85,
                         includeOverlay = false
                     )
@@ -87,6 +99,68 @@ class SessionController(
                 s.copy(
                     slots = slotsWithTail,
                     selectedIndex = index, // keep focus on page just processed
+                    isDirty = true
+                )
+            }
+
+        } catch (t: Throwable) {
+            _state.update { s ->
+                s.copy(
+                    slots = s.slots.map {
+                        if (it.index == index) PageSlot.Failed(index, t.message ?: "Processing failed")
+                        else it
+                    },
+                    lastError = t.message
+                )
+            }
+        }
+    }
+
+    suspend fun processPdfIntoSlot(index: Int, pageJpeg: ByteArray, enhanceMode: String) {
+        val sessionId = _state.value.sessionId
+
+        _state.update { s ->
+            s.copy(
+                slots = s.slots.map { if (it.index == index) PageSlot.Processing(index) else it },
+                lastError = null
+            )
+        }
+
+        try {
+            val imaging = OpenCvImaging()
+            val pipeline = CamScanPipeline(imaging)
+
+            val r = withContext(workDispatcher) {
+                pipeline.processFlatJpeg(
+                    flatJpeg = pageJpeg,
+                    options = CamScanPipeline.Options(
+                        enhanceMode = normalizeEnhanceMode(enhanceMode),
+                        jpegQuality = 85,
+                        includeOverlay = false
+                    )
+                )
+            }
+
+            val outFile = draftStore.writeProcessedJpeg(sessionId, index, r.outJpeg)
+
+            _state.update { s ->
+                val updatedSlots = s.slots.map {
+                    if (it.index == index) {
+                        PageSlot.Ready(index, outFile.absolutePath, r.quad, r.paperName)
+                    } else it
+                }
+
+                val hasEmptyTail = updatedSlots.lastOrNull() is PageSlot.Empty
+                val slotsWithTail = if (hasEmptyTail) {
+                    updatedSlots
+                } else {
+                    val nextIndex = (updatedSlots.maxOfOrNull { it.index } ?: -1) + 1
+                    updatedSlots + PageSlot.Empty(nextIndex)
+                }
+
+                s.copy(
+                    slots = slotsWithTail,
+                    selectedIndex = index,
                     isDirty = true
                 )
             }
