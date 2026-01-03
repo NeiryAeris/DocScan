@@ -82,6 +82,8 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
     val sessionController = remember { SessionController(context) }
     val sessionState by sessionController.state.collectAsState()
     var enhanceMode by remember { mutableStateOf("color-pro") }
+    var selectedSlotIndex by remember { mutableStateOf(-1) }
+    var isCapturing by remember { mutableStateOf(false) }
 
     fun finishAndExport(andPop: Boolean = true) {
         scope.launch(Dispatchers.IO) {
@@ -239,26 +241,50 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
         }
     }
 
-    val captureAndProcess = remember(sessionState.slots, enhanceMode) {
-        fun() {
-            val targetSlot = sessionState.slots.firstOrNull { it is PageSlot.Empty }
-                ?: return
-            val tempFile = File.createTempFile("raw_capture_", ".jpg", context.cacheDir)
+    val captureAndProcess: () -> Unit = remember(sessionController, enhanceMode) {
+        {
+            if (isCapturing) {
+                // You can show a Toast here to inform the user
+                // Toast.makeText(context, "Processing...", Toast.LENGTH_SHORT).show()
+            } else {
+                scope.launch {
+                    isCapturing = true // Start capture, lock the button
 
-            cameraController.takePhoto(
-                outputFile = tempFile,
-                onSaved = { file ->
-                    scope.launch(Dispatchers.IO) {
-                        val bytes = file.readBytes()
-                        sessionController.processIntoSlot(targetSlot.index, bytes, enhanceMode)
-                        file.delete()
+                    val slots = sessionController.state.value.slots
+                    val targetSlotIndex = slots.indexOfFirst { it is PageSlot.Empty }
+                        .let { if (it == -1) slots.size else it }
+
+                    if (targetSlotIndex == slots.size) {
+                        sessionController.addEmptySlot()
                     }
-                },
-                onError = { exc ->
-                    exc.printStackTrace()
-                    Toast.makeText(context, "Capture error: ${exc.message}", Toast.LENGTH_SHORT).show()
+
+                    val tempFile = withContext(Dispatchers.IO) {
+                        File.createTempFile("raw_capture_", ".jpg", context.cacheDir)
+                    }
+
+                    cameraController.takePhoto(
+                        outputFile = tempFile,
+                        onSaved = { file ->
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    val bytes = file.readBytes()
+                                    sessionController.processIntoSlot(targetSlotIndex, bytes, enhanceMode)
+                                } finally {
+                                    file.delete()
+                                    isCapturing = false // Capture and process successful, unlock the button
+                                }
+                            }
+                        },
+                        onError = { exc ->
+                            exc.printStackTrace()
+                            scope.launch(Dispatchers.Main) {
+                                Toast.makeText(context, "Capture error: ${exc.message}", Toast.LENGTH_SHORT).show()
+                            }
+                            isCapturing = false // Error occurred, unlock the button
+                        }
+                    )
                 }
-            )
+            }
         }
     }
 
@@ -295,7 +321,9 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                         contentPadding = PaddingValues(horizontal = 16.dp)
                     ) {
                         items(sessionState.slots) { slot ->
-                            SlotItemView(slot)
+                            Box(modifier = Modifier.clickable { selectedSlotIndex = if (selectedSlotIndex == slot.index) -1 else slot.index }) {
+                                SlotItemView(slot, isSelected = slot.index == selectedSlotIndex)
+                            }
                         }
                     }
 
@@ -347,7 +375,7 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                                     .size(80.dp)
                                     .clip(CircleShape)
                                     .background(if (hasCameraPermission) MaterialTheme.colorScheme.primary else Color.Gray)
-                                    .clickable(enabled = hasCameraPermission, onClick = captureAndProcess)
+                                    .clickable(enabled = hasCameraPermission && !isCapturing, onClick = { captureAndProcess() })
                             ) {
                                 Icon(Icons.Default.Camera, "Chụp", tint = Color.White, modifier = Modifier.size(40.dp))
                             }
@@ -360,21 +388,13 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
         }
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            val readySlot = sessionState.slots.filterIsInstance<PageSlot.Ready>().lastOrNull()
+            val selectedSlot = sessionState.slots.getOrNull(selectedSlotIndex)
+            val readySlot = selectedSlot as? PageSlot.Ready
 
-            if (readySlot != null) {
-                AsyncImage(
-                    model = File(readySlot.processedJpegPath),
-                    contentDescription = "Processed page preview",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else if (imageUri == null && pdfUri == null) {
+            // Camera is always in the background
+            if (imageUri == null && pdfUri == null) {
                 if (hasCameraPermission) {
                     var previewView by remember { mutableStateOf<PreviewView?>(null) }
-                    if (previewView != null) {
-                        LaunchedEffect(previewView) { cameraController.start(lifecycleOwner, previewView!!) }
-                    }
                     AndroidView(
                         factory = { ctx ->
                             PreviewView(ctx).apply {
@@ -385,8 +405,16 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                             }
                         },
                         modifier = Modifier.fillMaxSize(),
-                        update = { view -> previewView = view }
+                        update = {
+                            previewView = it
+                        }
                     )
+
+                    LaunchedEffect(lifecycleOwner, previewView) {
+                        if (previewView != null) {
+                            cameraController.start(lifecycleOwner, previewView!!)
+                        }
+                    }
                 } else {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -395,7 +423,7 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                         Text("Cần quyền truy cập Camera để quét tài liệu.")
                     }
                 }
-            } else {
+            } else if (readySlot == null) {
                 Box(
                     modifier = Modifier.fillMaxSize().background(Color.Black),
                     contentAlignment = Alignment.Center
@@ -407,12 +435,22 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
                     }
                 }
             }
+
+            // Preview on top
+            if (readySlot != null) {
+                AsyncImage(
+                    model = File(readySlot.processedJpegPath),
+                    contentDescription = "Processed page preview",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+                )
+            }
         }
     }
 }
 
 @Composable
-fun SlotItemView(slot: PageSlot) {
+fun SlotItemView(slot: PageSlot, isSelected: Boolean) {
     val shape = MaterialTheme.shapes.medium
     val baseModifier = Modifier
         .size(60.dp, 80.dp)
@@ -456,7 +494,11 @@ fun SlotItemView(slot: PageSlot) {
         is PageSlot.Ready -> {
             Box(
                 modifier = baseModifier
-                    .border(2.dp, MaterialTheme.colorScheme.primary, shape)
+                    .border(
+                        width = if (isSelected) 3.dp else 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = shape
+                    )
             ) {
                 AsyncImage(
                     model = File(slot.processedJpegPath),
