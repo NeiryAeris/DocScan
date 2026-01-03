@@ -72,6 +72,7 @@ data class RemoteAiAskResponseDto(
 
 interface RemoteAiClient {
     suspend fun upsertOcrIndex(body: RemoteAiUpsertOcrRequestDto): RemoteAiUpsertOcrResponseDto
+    suspend fun upsertPdfIndex(docId: String, title: String?, replace: Boolean, pdfBytes: ByteArray, filename: String): RemoteAiUpsertOcrResponseDto
     suspend fun deleteDocIndex(docId: String): RemoteAiDeleteDocResponseDto
     suspend fun askChat(question: String, docIds: List<String>? = null, topK: Int? = null): RemoteAiAskResponseDto
 }

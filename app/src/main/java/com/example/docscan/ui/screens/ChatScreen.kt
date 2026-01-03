@@ -1,5 +1,8 @@
 package com.example.docscan.ui.screens
 
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.Color as AndroidColor
+import android.graphics.Matrix
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
@@ -136,75 +139,103 @@ fun ChatScreen(navController: NavHostController) {
         return md.digest().joinToString("") { "%02x".format(it) }.take(32)
     }
 
-    suspend fun ocrPdfToPages(docId: String, pdfFile: File, maxPages: Int = 30): List<RemoteAiPageInDto> =
-        withContext(Dispatchers.IO) {
-            val pages = mutableListOf<RemoteAiPageInDto>()
+    suspend fun ocrPdfToPages(
+        docId: String,
+        pdfFile: File,
+        maxPages: Int = 30
+    ): List<RemoteAiPageInDto> = withContext(Dispatchers.IO) {
+        val pages = mutableListOf<RemoteAiPageInDto>()
 
-            val pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
-            val renderer = PdfRenderer(pfd)
+        val pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
+        val renderer = PdfRenderer(pfd)
 
-            try {
-                val count = minOf(renderer.pageCount, maxPages)
-                for (i in 0 until count) {
-                    val page = renderer.openPage(i)
-                    try {
-                        // Render at a reasonable scale (avoid OOM)
-                        val scale = 2
-                        val width = page.width * scale
-                        val height = page.height * scale
-                        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+        try {
+            val count = minOf(renderer.pageCount, maxPages)
+            for (i in 0 until count) {
+                val page = renderer.openPage(i)
+                try {
+                    // Render sharper for text PDFs + avoid transparent background -> black JPEG/OCR
+                    val scale = 2f
+                    val width = (page.width * scale).toInt().coerceAtLeast(1)
+                    val height = (page.height * scale).toInt().coerceAtLeast(1)
 
-                        val buffer = ByteBuffer.allocate(bitmap.byteCount)
-                        bitmap.copyPixelsToBuffer(buffer)
+                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
 
-                        val ocrImage = OcrImage.Rgba8888(
-                            bytes = buffer.array(),
-                            width = bitmap.width,
-                            height = bitmap.height,
-                            rowStride = bitmap.rowBytes
-                        )
+                    // IMPORTANT: born-digital PDFs may have transparent background => fill white
+                    AndroidCanvas(bitmap).drawColor(AndroidColor.WHITE)
 
-                        val result = ocrGateway.recognize(
-                            docId = docId,
-                            pageId = "page_${i + 1}",
-                            image = ocrImage
-                        )
+                    val matrix = Matrix().apply { postScale(scale, scale) }
 
-                        val text = result.text.raw.ifBlank { "" }
+                    // FOR_PRINT usually yields better text render than FOR_DISPLAY
+                    page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+
+                    val buffer = ByteBuffer.allocate(bitmap.byteCount)
+                    bitmap.copyPixelsToBuffer(buffer)
+
+                    val ocrImage = OcrImage.Rgba8888(
+                        bytes = buffer.array(),
+                        width = bitmap.width,
+                        height = bitmap.height,
+                        rowStride = bitmap.rowBytes
+                    )
+
+                    val result = ocrGateway.recognize(
+                        docId = docId,
+                        pageId = "page_${i + 1}",
+                        image = ocrImage
+                    )
+
+                    val text = result.text.raw.trim()
+                    if (text.isNotBlank()) {
                         pages.add(RemoteAiPageInDto(pageNumber = i + 1, text = text))
-
-                        bitmap.recycle()
-                    } finally {
-                        page.close()
                     }
-                }
-            } finally {
-                renderer.close()
-                pfd.close()
-            }
 
-            pages
+                    bitmap.recycle()
+                } finally {
+                    page.close()
+                }
+            }
+        } finally {
+            renderer.close()
+            pfd.close()
         }
+
+        pages
+    }
+
 
     suspend fun indexPdfIntoRag(docTitle: String?, pdfFile: File): String = withContext(Dispatchers.IO) {
         val docId = stableDocId(pdfFile)
+        val title = docTitle ?: pdfFile.name
 
-        // 1) OCR all pages -> list of RemoteAiPageInDto
-        val pages = ocrPdfToPages(docId, pdfFile, maxPages = 30)
-
-        // 2) Upsert into vector index (gateway builds chunks server-side)
-        aiClient.upsertOcrIndex(
-            RemoteAiUpsertOcrRequestDto(
+        // 1) Prefer born-digital path: send PDF to gateway, server extracts text (no OCR)
+        try {
+            val pdfBytes = pdfFile.readBytes()
+            aiClient.upsertPdfIndex(
                 docId = docId,
-                title = docTitle ?: pdfFile.name,
+                title = title,
                 replace = true,
-                pages = pages
+                pdfBytes = pdfBytes,
+                filename = pdfFile.name
             )
-        )
+            return@withContext docId
+        } catch (_: Exception) {
+            // 2) Fallback OCR path: for scanned PDFs (or if backend path not available)
+            val pages = ocrPdfToPages(docId, pdfFile, maxPages = 30)
 
-        docId
+            aiClient.upsertOcrIndex(
+                RemoteAiUpsertOcrRequestDto(
+                    docId = docId,
+                    title = title,
+                    replace = true,
+                    pages = pages
+                )
+            )
+
+            return@withContext docId
+        }
     }
+
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
