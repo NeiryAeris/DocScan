@@ -1,6 +1,5 @@
 package com.example.docscan.ui.screens
 
-import com.example.docscan.App
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
