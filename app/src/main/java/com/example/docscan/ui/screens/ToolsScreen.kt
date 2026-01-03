@@ -1,5 +1,6 @@
 package com.example.docscan.ui.screens
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
@@ -26,6 +27,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.example.docscan.App
 import com.example.docscan.R
+import com.example.docscan.data.UserPreferencesRepository
 import com.example.docscan.ui.components.ActionGrid
 import com.example.docscan.ui.components.ActionItemData
 import com.example.docscan.ui.components.AppBackground
@@ -37,7 +39,9 @@ import com.itextpdf.text.Document
 import com.itextpdf.text.pdf.PdfCopy
 import com.itextpdf.text.pdf.PdfReader
 import com.itextpdf.text.pdf.parser.PdfTextExtractor
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.apache.poi.xslf.usermodel.SlideLayout
@@ -51,6 +55,34 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+
+
+private fun backupFileToDriveIfNeeded(scope: CoroutineScope, context: Context, fileUri: Uri, defaultFileName: String, mimeType: String) {
+    scope.launch(Dispatchers.IO) {
+        val userPreferences = UserPreferencesRepository(context)
+        if (userPreferences.isBackupEnabled.first()) {
+            try {
+                val driveStatus = App.driveClient.status()
+                if (driveStatus.linked) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Backing up to Google Drive...", Toast.LENGTH_SHORT).show()
+                    }
+                    val fileBytes = context.contentResolver.openInputStream(fileUri)?.readBytes()
+                    if (fileBytes != null) {
+                        App.driveClient.upload(fileBytes, defaultFileName, mimeType)
+                    } else {
+                        throw IOException("Could not read file for backup.")
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Backup failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -238,6 +270,7 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
                             }
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(context, "Các tệp đã được hợp nhất thành công", Toast.LENGTH_LONG).show()
+                                backupFileToDriveIfNeeded(scope, context, outputUri, "merged-${System.currentTimeMillis()}.pdf", "application/pdf")
                             }
                         } catch (e: Exception) {
                             e.printStackTrace()
@@ -324,6 +357,7 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
                             }
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(context, "Tệp ZIP đã được lưu thành công", Toast.LENGTH_LONG).show()
+                                backupFileToDriveIfNeeded(scope, context, zipFileUri, "converted-images-${System.currentTimeMillis()}.zip", "application/zip")
                             }
                         } catch (e: Exception) {
                             e.printStackTrace()
@@ -398,6 +432,7 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
                                 workbook.close()
                             }
                             Toast.makeText(context, "Tệp đã được lưu thành công", Toast.LENGTH_LONG).show()
+                            backupFileToDriveIfNeeded(scope, context, savedExcelUri, "converted-${System.currentTimeMillis()}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                         } catch (e: Exception) {
                             e.printStackTrace()
                             Toast.makeText(context, "Lỗi khi lưu tệp: ${e.message}", Toast.LENGTH_LONG).show()
@@ -469,6 +504,7 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
                                 document.close()
                             }
                             Toast.makeText(context, "Tệp đã được lưu thành công", Toast.LENGTH_LONG).show()
+                            backupFileToDriveIfNeeded(scope, context, savedDocxUri, "converted-${System.currentTimeMillis()}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                         } catch (e: Exception) {
                             e.printStackTrace()
                             Toast.makeText(context, "Lỗi khi lưu tệp: ${e.message}", Toast.LENGTH_LONG).show()
@@ -527,6 +563,7 @@ fun ToolsScreen(navController: NavHostController, ocrGateway: OcrGateway) {
                                 ppt.close()
                             }
                             Toast.makeText(context, "Tệp đã được lưu thành công", Toast.LENGTH_LONG).show()
+                            backupFileToDriveIfNeeded(scope, context, savedPptxUri, "converted-${System.currentTimeMillis()}.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation")
                         } catch (e: Exception) {
                             e.printStackTrace()
                             Toast.makeText(context, "Lỗi khi lưu tệp: ${e.message}", Toast.LENGTH_LONG).show()

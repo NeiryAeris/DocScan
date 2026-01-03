@@ -38,6 +38,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.example.docscan.App
+import com.example.docscan.data.UserPreferencesRepository
 import com.example.docscan.logic.camera.CameraController
 import com.example.docscan.logic.scan.PageSlot
 import com.example.docscan.logic.session.SessionController
@@ -46,6 +48,7 @@ import com.example.docscan.logic.utils.AndroidPdfExporter
 import com.example.docscan.logic.ai.AiIndexing
 import com.example.pipeline_core.EncodedPage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -166,6 +169,29 @@ fun ScanScreen(navController: NavController, imageUri: Uri? = null, pdfUri: Uri?
 
                 // Notify the media scanner
                 MediaScannerConnection.scanFile(context, arrayOf(outFile.toString()), null, null)
+
+                // Backup to Google Drive if enabled (non-blocking)
+                launch {
+                    val userPreferencesRepository = UserPreferencesRepository(context)
+                    try {
+                        if (userPreferencesRepository.isBackupEnabled.first()) {
+                            val driveStatus = App.driveClient.status()
+                            if (driveStatus.linked) {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "Backing up to Google Drive...", Toast.LENGTH_SHORT).show()
+                                }
+                                val fileBytes = outFile.readBytes()
+                                App.driveClient.upload(fileBytes, outFile.name, "application/pdf")
+                                // Optional: success toast, but might be too much.
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Backup failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
 
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "Saved to ${outFile.name}", Toast.LENGTH_LONG).show()

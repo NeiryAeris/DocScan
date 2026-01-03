@@ -1,6 +1,5 @@
 package com.example.docscan.ui.screens
 
-import java.io.File
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -33,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
@@ -41,7 +41,7 @@ import com.example.docscan.App
 import com.example.docscan.R
 import com.example.docscan.auth.AuthState
 import com.example.docscan.auth.GoogleAuthManager
-import com.example.docscan.logic.storage.AppStorage
+import com.example.docscan.data.UserPreferencesRepository
 import com.example.docscan.ui.components.AppBackground
 import com.example.docscan.ui.theme.Theme
 import com.example.docscan.ui.theme.ThemeViewModel
@@ -58,6 +58,10 @@ fun ProfileScreen(navController: NavHostController) {
     val uriHandler = LocalUriHandler.current
 
     val themeViewModel: ThemeViewModel = viewModel(factory = ThemeViewModelFactory(context))
+    val profileViewModel: ProfileViewModel = viewModel(factory = ProfileViewModelFactory(UserPreferencesRepository(context)))
+
+    val isBackupEnabled by profileViewModel.isBackupEnabled.collectAsStateWithLifecycle()
+
     var showThemeDialog by remember { mutableStateOf(false) }
 
     var showFeedbackSheet by remember { mutableStateOf(false) }
@@ -67,23 +71,6 @@ fun ProfileScreen(navController: NavHostController) {
     val ratingSheetState = rememberModalBottomSheetState()
 
     var authState by remember { mutableStateOf<AuthState>(AuthState.SignedOut) }
-    var isBackupEnabled by remember { mutableStateOf(false) }
-
-    LaunchedEffect(authState) {
-        try {
-            if (authState is AuthState.SignedIn) {
-                val st = App.driveClient.status()
-                isBackupEnabled = st.linked
-                if (st.linked && st.folderId == null) {
-                    App.driveClient.initFolder()
-                }
-            } else {
-                isBackupEnabled = false
-            }
-        } catch (_: Exception) {
-            // ignore; keep UI usable
-        }
-    }
 
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
@@ -170,7 +157,7 @@ fun ProfileScreen(navController: NavHostController) {
                                                     Log.i("ProfileScreen", "Drive linked, initializing app folder...")
                                                     App.driveClient.initFolder()
                                                 }
-                                                isBackupEnabled = true
+                                                profileViewModel.setBackupEnabled(true)
                                                 Toast.makeText(context, "Đã bật sao lưu và đồng bộ hóa.", Toast.LENGTH_SHORT).show()
                                             } else {
                                                 Log.i("ProfileScreen", "Drive not linked, starting OAuth flow...")
@@ -184,71 +171,11 @@ fun ProfileScreen(navController: NavHostController) {
                                         }
                                     }
                                 } else {
-                                    isBackupEnabled = false
+                                    profileViewModel.setBackupEnabled(false)
                                     Toast.makeText(context, "Đã tắt sao lưu.", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         )
-                    }
-                )
-            }
-            item {
-                ProfileItem(
-                    icon = Icons.Default.CloudUpload,
-                    title = "Đồng bộ ngay (Upload lên Drive)",
-                    onClick = {
-                        coroutineScope.launch {
-                            try {
-                                if (authState !is AuthState.SignedIn) {
-                                    Toast.makeText(context, "Vui lòng đăng nhập trước.", Toast.LENGTH_LONG).show()
-                                    return@launch
-                                }
-
-                                val st = App.driveClient.status()
-                                if (!st.linked) {
-                                    Toast.makeText(context, "Chưa liên kết Drive. Hãy bật Sao lưu trước.", Toast.LENGTH_LONG).show()
-                                    return@launch
-                                }
-                                if (st.folderId == null) {
-                                    App.driveClient.initFolder()
-                                }
-
-                                val dir = AppStorage.getPublicAppDir()
-                                if (dir == null) {
-                                    Toast.makeText(context, "Không truy cập được thư mục lưu file.", Toast.LENGTH_LONG).show()
-                                    return@launch
-                                }
-
-                                val pdfs = dir.listFiles { f -> f.isFile && f.extension.equals("pdf", true) }?.toList().orEmpty()
-                                if (pdfs.isEmpty()) {
-                                    Toast.makeText(context, "Không có PDF để upload.", Toast.LENGTH_SHORT).show()
-                                    return@launch
-                                }
-
-                                val maxBytes = 25L * 1024 * 1024
-                                var uploaded = 0
-                                var skipped = 0
-
-                                for (f in pdfs) {
-                                    if (f.length() > maxBytes) { skipped++; continue }
-                                    App.driveClient.upload(
-                                        bytes = f.readBytes(),
-                                        filename = f.name,
-                                        mimeType = "application/pdf"
-                                    )
-                                    uploaded++
-                                }
-
-                                val sync = App.driveClient.sync()
-                                Toast.makeText(
-                                    context,
-                                    "Uploaded=$uploaded, skipped=$skipped | Indexed=${sync.counts.indexed}, skippedIndex=${sync.counts.skipped}",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Sync lỗi: ${e.message}", Toast.LENGTH_LONG).show()
-                            }
-                        }
                     }
                 )
             }

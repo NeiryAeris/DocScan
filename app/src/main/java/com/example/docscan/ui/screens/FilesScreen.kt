@@ -1,6 +1,7 @@
 package com.example.docscan.ui.screens
 
 import android.graphics.Bitmap
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,7 +23,6 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.example.docscan.logic.storage.DocumentFile
 import com.example.docscan.logic.storage.DocumentRepository
-import com.example.docscan.logic.utils.FileOpener
 import com.example.docscan.logic.utils.PdfThumbnailGenerator
 import com.example.docscan.ui.components.AppBackground
 import com.example.docscan.ui.components.DocumentCard
@@ -32,6 +32,8 @@ import com.example.docscan.ui.theme.ThemeViewModelFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -159,7 +161,8 @@ fun FilesScreen(navController: NavHostController? = null) {
                                         selectedDocuments.add(doc)
                                     }
                                 } else {
-                                    FileOpener.openPdf(context, doc.file)
+                                    val encodedUri = URLEncoder.encode(Uri.fromFile(doc.file).toString(), StandardCharsets.UTF_8.toString())
+                                    navController?.navigate("pdf_viewer/$encodedUri")
                                 }
                             }
                         }

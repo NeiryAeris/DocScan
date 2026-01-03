@@ -91,6 +91,8 @@ class App : Application() {
             private set
 
         var pdfToSign: Uri? = null
+        
+        var pdfToView: Uri? = null
 
         // Generic preview data
         var previewImageBytes: ByteArray? = null
